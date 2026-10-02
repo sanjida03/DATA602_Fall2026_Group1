@@ -5,6 +5,7 @@ Date: 2026-10-01
 Description: Runs the foundation data-entry application and validates user input.
 '''
 import sqlite3
+from datetime import datetime
 
 # Connect to the SQLite database used by the application.
 connection = sqlite3.connect("foundation.db")
@@ -32,12 +33,9 @@ def get_positive_int(prompt):
     while True:
         try:
             value = int(input(prompt))
-
             if value > 0:
                 return value
-
             print("Value must be greater than 0.")
-
         except ValueError:
             print("Please enter a whole number.")
 
@@ -46,27 +44,51 @@ def get_positive_float(prompt):
     while True:
         try:
             value = float(input(prompt))
-
             if value > 0:
                 return value
-
             print("Value must be greater than 0.")
-
         except ValueError:
             print("Please enter a valid number.")
+
+# Prevents negative numbers, decimals, and text from being accepted.
+def get_nonnegative_int(prompt):
+    while True:
+        try:
+            user_input = input(prompt).replace(",", "")
+            value = int(user_input)
+            if value >= 0:
+                return value
+            print("Value cannot be negative.")
+        except ValueError:
+            print("Please enter a whole number.")
+
+# Looks up a product by name and returns its product_id.
+def get_product_id_by_name():
+    while True:
+        product_name = input("Product name: ").strip()
+        cursor.execute('''
+            SELECT product_id, product_name
+            FROM products
+            WHERE LOWER(product_name) = LOWER(?)
+        ''', (product_name,))
+        product = cursor.fetchone()
+        if product:
+            print(f"Matched product: {product[1]} (Product ID: {product[0]})")
+            return product[0]
+        print("Product not found. Please enter the product name again.")
 
 # Collects the static characteristics for new foundation product.
 def add_product():
     print("\nAdd New Product")
-    product_name = input("Product name: ")
-    brand = input("Brand: ")
+    product_name = input("Product name: ").strip()
+    brand = input("Brand: ").strip().lower()
     size_oz = get_positive_float("Size in ounces: ")
     celebrity_founded = get_yes_no("Celebrity founded? (y/n): ")
-    packaging_material = input("Packaging material: ")
+    packaging_material = input("Packaging material: ").strip().lower()
     shade_count = get_positive_int("Shade count: ")
     undertone_count = get_positive_int("Undertone count: ")
-    finish_type = input("Finish type: ")
-    coverage_level = input("Coverage level: ")
+    finish_type = input("Finish type: ").strip().lower()
+    coverage_level = input("Coverage level: ").strip().lower()
     non_comedogenic = get_yes_no("Non-comedogenic? (y/n): ")
     skincare_benefits = get_yes_no("Skincare benefits? (y/n): ")
     spf_present = get_yes_no("SPF present? (y/n): ")
@@ -83,7 +105,7 @@ def add_product():
             print("Wear claim must be greater than 0.")
         except ValueError:
             print("Please enter a whole number or leave blank.")
-
+    # Saves the collected product characteristic data as a new row in the products table.
     cursor.execute('''
         INSERT INTO products (
             product_name,
@@ -119,9 +141,53 @@ def add_product():
     connection.commit()
     print("Product saved successfully.")
 
-cursor.execute("SELECT * FROM products")
-products = cursor.fetchall()
-print(products)
+# Collects changing product data.
+def add_observation():
+    print("\nAdd Product Observation")
+    product_id = get_product_id_by_name()
+    source = input("Source: ").strip().lower()
+    # Automatically records the date and time the observation is collected.
+    collection_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    price_usd = get_positive_float("Price (USD): ")
+    tiktok_units_sold = get_nonnegative_int("TikTok units sold: ")
+    bestseller_list = get_yes_no("On bestseller list? (y/n): ")
+    while True:
+        try:
+            avg_rating = float(input("Average rating (0-5): "))
+
+            if 0 <= avg_rating <= 5:
+                break
+
+            print("Rating must be between 0 and 5.")
+
+        except ValueError:
+            print("Please enter a valid number.")
+    review_count = get_nonnegative_int("Review count: ")
+    # Saves the collected observation data as a new row in the product_observations table.
+    cursor.execute('''
+        INSERT INTO product_observations (
+            product_id,
+            source,
+            collection_date,
+            price_usd,
+            tiktok_units_sold,
+            bestseller_list,
+            avg_rating,
+            review_count
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        product_id,
+        source,
+        collection_date,
+        price_usd,
+        tiktok_units_sold,
+        bestseller_list,
+        avg_rating,
+        review_count
+    ))
+    connection.commit()
+    print("Observation saved successfully.")
 
 # Main menu display
 def menu():
@@ -139,7 +205,7 @@ while True:
     if choice == "1":
         add_product()
     elif choice == "2":
-        print("Add product observation selected")
+        add_observation()
     elif choice == "3":
         print("View products selected")
     elif choice == "4":

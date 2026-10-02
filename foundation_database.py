@@ -7,13 +7,12 @@ Description: Set up the initial SQLite database structure with products and prod
 import sqlite3
 
 # SQLite database connection
-connection = sqlite3.connect('foundation.db')
+connection = sqlite3.connect("foundation.db")
+
+# Enforce relationships between database tables
+connection.execute("PRAGMA foreign_keys = ON")
 
 cursor = connection.cursor()
-
-cursor.execute('''
-               DROP TABLE IF EXISTS products;
-        ''')
             
 # PRODUCTS TABLE: Stores each foundation product and its static characteristics.
 cursor.execute('''
@@ -70,5 +69,6 @@ for column in columns_products:
 for column in columns:
     print(column)
 
+connection.commit()
 
 connection.close()
