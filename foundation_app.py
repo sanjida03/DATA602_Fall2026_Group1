@@ -6,6 +6,7 @@ Description: Runs the foundation data-entry application and validates user input
 '''
 import sqlite3
 from datetime import datetime
+import pandas as pd
 
 # Connect to the SQLite database used by the application.
 connection = sqlite3.connect("foundation.db")
@@ -189,26 +190,65 @@ def add_observation():
     connection.commit()
     print("Observation saved successfully.")
 
+# Displays all saved foundation products using PANDAS.
+def view_products():
+    print("\nSaved Products")
+    products_df = pd.read_sql_query(
+        "SELECT * FROM products",
+        connection
+    )
+    print(products_df.to_string(index=False))
+
+# Displays all saved product observations.
+def view_observations():
+    print("\nProduct Observations")
+    observations_df = pd.read_sql_query(
+        '''
+        SELECT
+            po.observation_id,
+            p.product_name,
+            po.source,
+            po.collection_date,
+            po.price_usd,
+            po.tiktok_units_sold,
+            po.bestseller_list,
+            po.avg_rating,
+            po.review_count
+        FROM product_observations po
+        JOIN products p
+            ON po.product_id = p.product_id
+        ORDER BY po.collection_date DESC
+        ''',
+        connection
+    )
+    if observations_df.empty:
+        print("No product observations found.")
+    else:
+        print(observations_df.to_string(index=False))
+
 # Main menu display
 def menu():
     print("\nFoundation Data Collection")
     print("1. Add new product")
     print("2. Add product observation")
     print("3. View products")
-    print("4. Exit")
+    print("4. View product observations")
+    print("5. Exit")
 
 menu()
 
 # Menu choice determines which part of the program runs.
 while True:
-    choice = input("Choose an option(1-4): ")
+    choice = input("Choose an option(1-5): ")
     if choice == "1":
         add_product()
     elif choice == "2":
         add_observation()
     elif choice == "3":
-        print("View products selected")
+        view_products()
     elif choice == "4":
+        view_observations()
+    elif choice == "5":
         print("Exiting program")
         break
     else:
