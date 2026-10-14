@@ -164,6 +164,19 @@ def get_required_text(prompt):
             return value
         print("This field cannot be blank.")
 
+# Displays a Pandas DataFrame in a readable terminal format.
+def display_dataframe(df):
+    if df.empty:
+        print("No records found.")
+        return
+    with pd.option_context(
+        "display.max_columns", None,
+        "display.width", 140,
+        "display.max_colwidth", 30
+    ):
+        print(df.to_string(index=False))
+        
+
 # Collects the static characteristics for new foundation product.
 def add_product():
     print("\nAdd New Product")
@@ -313,7 +326,36 @@ def view_products():
         "SELECT * FROM products",
         connection
     )
-    print(products_df.to_string(index=False))
+    if products_df.empty:
+        print("No products found.")
+        return
+    print("\nProduct Information")
+    product_info = products_df[
+        [
+            "product_id",
+            "product_name",
+            "brand",
+            "size_oz",
+            "packaging_material",
+            "finish_type",
+            "coverage_level"
+        ]
+    ]
+    display_dataframe(product_info)
+    print("\nProduct Characteristics")
+    product_characteristics = products_df[
+        [
+            "product_id",
+            "shade_count",
+            "undertone_count",
+            "celebrity_founded",
+            "non_comedogenic",
+            "skincare_benefits",
+            "spf_present",
+            "wear_claim_hours"
+        ]
+    ]
+    display_dataframe(product_characteristics)
 
 # Displays all saved product observations.
 def view_observations():
@@ -340,7 +382,7 @@ def view_observations():
     if observations_df.empty:
         print("No product observations found.")
     else:
-        print(observations_df.to_string(index=False))
+        display_dataframe(observations_df)
 
 # Main menu display
 def menu():
