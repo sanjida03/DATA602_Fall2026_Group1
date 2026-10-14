@@ -2,7 +2,28 @@
 Filename: foundation_app.py
 Author: Travisha Mills
 Date: 2026-10-01
-Description: Runs the foundation data-entry application and validates user input.
+Project: Foundation Characteristics & Consumer Demand
+Description: Command-line application used to manually collect and review foundation
+Main responsibilities:
+    - Add foundation products and their static characteristics.
+    - Add source-specific product observations.
+    - Validate user input before saving data.
+    - Standardize categorical values.
+    - Preserve missing values as NULL instead of false zeros.
+    - Prevent duplicate product identities.
+    - Warn about likely duplicate observations.
+    - Display collected products and observations using Pandas.
+Database: foundation.db
+Database tables:
+    - products
+    - product_observations
+Dependencies:
+    - Python Version 3.14.6 or later
+    - pandas
+    - sqlite3
+Run order:
+    1. Run foundation_database.py to initialize the database.
+    2. Run foundation_app.py to enter and review data.
 '''
 import sqlite3
 from datetime import datetime
@@ -16,17 +37,22 @@ connection.execute("PRAGMA foreign_keys = ON")
 
 cursor = connection.cursor()
 
-# Reusable validation function for yes/no questions
-# Returns 1 for yes and 0 for no so the value matches the SQLite table design.
-def get_yes_no(prompt):
+# Validates yes/no input.
+# If allow_blank=True, blank input returns None so SQLite stores NULL.
+def get_yes_no(prompt, allow_blank=False):
     while True:
-        user_input = input(prompt).lower()
+        user_input = input(prompt).strip().lower()
         if user_input == "y":
             return 1
         elif user_input == "n":
             return 0
+        elif allow_blank and user_input == "":
+            return None
         else:
-            print("Please enter y or n.")
+            if allow_blank:
+                print("Enter y, n, or leave blank.")
+            else:
+                print("Enter y/n.")
 
 # Reusable validation function for positive whole numbers.
 # Prevents text, decimals, zero, and negative values from being accepted.
@@ -38,30 +64,49 @@ def get_positive_int(prompt):
                 return value
             print("Value must be greater than 0.")
         except ValueError:
-            print("Please enter a whole number.")
+            print("Enter a whole number.")
 
 # Reusable validation function for positive decimal numbers.
-def get_positive_float(prompt):
+def get_float(prompt, allow_blank=False, allow_zero=False):
     while True:
+        user_input = input(prompt).strip()
+        if allow_blank and user_input == "":
+            return None
         try:
-            value = float(input(prompt))
-            if value > 0:
-                return value
-            print("Value must be greater than 0.")
+            value = float(user_input)
+            if allow_zero:
+                if value >= 0:
+                    return value
+                else:
+                    print("Value cannot be negative.")
+            else:
+                if value > 0:
+                    return value
+                else:
+                    print("Value must be greater than 0.")
         except ValueError:
-            print("Please enter a valid number.")
+            if allow_blank:
+                print("Enter a valid number or leave blank.")
+            else:
+                print("Enter a valid number.")
 
-# Prevents negative numbers, decimals, and text from being accepted.
-def get_nonnegative_int(prompt):
+# If allow_blank=True, blank input returns None so SQLite stores NULL.
+def get_nonnegative_int(prompt, allow_blank=False):
     while True:
+        user_input = input(prompt).strip().replace(",", "")
+        if allow_blank and user_input == "":
+            return None
         try:
-            user_input = input(prompt).replace(",", "")
             value = int(user_input)
             if value >= 0:
                 return value
-            print("Value cannot be negative.")
+            else:
+                print("Value cannot be negative.")
         except ValueError:
-            print("Please enter a whole number.")
+            if allow_blank:
+                print("Enter a whole number or leave blank.")
+            else:
+                print("Enter a whole number.")
 
 # Looks up a product by name and returns its product_id.
 def get_product_id_by_name():
@@ -78,24 +123,67 @@ def get_product_id_by_name():
             return product[0]
         print("Product not found. Please enter the product name again.")
 
+# Displays a numbered list of valid options and returns the selected value.
+def get_choice(prompt, options):
+    while True:
+        print(f"{prompt}")
+        for number, label in options.items():
+            print(f"{number}. {label}")
+        choice = input("Choose an option: ").strip()
+        if choice in options:
+            return options[choice]
+        print("Choose one of the listed options.")
+
+# Validates that the entered source URL begins with http:// or https://
+def get_url(prompt):
+    while True:
+        url = input(prompt).strip()
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        else:
+            print("Enter a valid URL starting with http:// or https://")
+
+# Checks for an existing observation with the same product, source, and URL.
+def check_duplicate_observation(product_id, source, source_url):
+    cursor.execute('''
+        SELECT observation_id, collection_date
+        FROM product_observations
+        WHERE product_id = ?
+          AND source = ?
+          AND source_url = ?
+        ORDER BY collection_date DESC
+        LIMIT 1
+    ''', (product_id, source, source_url))
+    return cursor.fetchone()
+
+# Requires a non-blank text value before continuing.
+def get_required_text(prompt):
+    while True:
+        value = input(prompt).strip()
+        if value != "":
+            return value
+        print("This field cannot be blank.")
+
 # Collects the static characteristics for new foundation product.
 def add_product():
     print("\nAdd New Product")
-    product_name = input("Product name: ").strip()
-    brand = input("Brand: ").strip().lower()
-    size_oz = get_positive_float("Size in ounces: ")
+    product_name = get_required_text("Product name: ")
+    brand = get_required_text("Brand: ").lower()
+    size_oz = get_float("Size in ounces: ")
     celebrity_founded = get_yes_no("Celebrity founded? (y/n): ")
-    packaging_material = input("Packaging material: ").strip().lower()
+    packaging_options = {"1": "glass", "2": "plastic"}
+    packaging_material = get_choice("Choose packaging material:", packaging_options)
     shade_count = get_positive_int("Shade count: ")
     undertone_count = get_positive_int("Undertone count: ")
-    finish_type = input("Finish type: ").strip().lower()
-    coverage_level = input("Coverage level: ").strip().lower()
-    non_comedogenic = get_yes_no("Non-comedogenic? (y/n): ")
-    skincare_benefits = get_yes_no("Skincare benefits? (y/n): ")
-    spf_present = get_yes_no("SPF present? (y/n): ")
+    finish_options = {"1": "matte", "2": "natural", "3": "satin","4": "radiant", "5": "dewy"}
+    finish_type = get_choice("Choose finish type:", finish_options)
+    coverage_options = {"1": "light", "2": "medium", "3": "full"}
+    coverage_level = get_choice( "Choose coverage level:", coverage_options)
+    non_comedogenic = get_yes_no("Non-comedogenic? (y/n, leave blank if unknown): ",allow_blank=True )
+    skincare_benefits = get_yes_no("Skincare benefits? (y/n, leave blank if unknown): ", allow_blank=True)
+    spf_present = get_yes_no("SPF present? (y/n, leave blank if unknown): ", allow_blank=True)
     while True:
         wear_input = input("Wear claim in hours (leave blank if none): ")
-
         if wear_input == "":
             wear_claim_hours = None
             break
@@ -107,8 +195,25 @@ def add_product():
         except ValueError:
             print("Please enter a whole number or leave blank.")
     # Saves the collected product characteristic data as a new row in the products table.
-    cursor.execute('''
-        INSERT INTO products (
+    try:
+        cursor.execute('''
+            INSERT INTO products (
+                product_name,
+                brand,
+                size_oz,
+                celebrity_founded,
+                packaging_material,
+                shade_count,
+                undertone_count,
+                finish_type,
+                coverage_level,
+                non_comedogenic,
+                skincare_benefits,
+                spf_present,
+                wear_claim_hours
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
             product_name,
             brand,
             size_oz,
@@ -122,69 +227,80 @@ def add_product():
             skincare_benefits,
             spf_present,
             wear_claim_hours
+        ))
+        connection.commit()
+        print("Product saved successfully.")
+    except sqlite3.IntegrityError:
+        print(
+            "Duplicate product detected. "
+            "A product with the same brand, name, and size already exists."
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        product_name,
-        brand,
-        size_oz,
-        celebrity_founded,
-        packaging_material,
-        shade_count,
-        undertone_count,
-        finish_type,
-        coverage_level,
-        non_comedogenic,
-        skincare_benefits,
-        spf_present,
-        wear_claim_hours
-    ))
-    connection.commit()
-    print("Product saved successfully.")
 
 # Collects changing product data.
 def add_observation():
     print("\nAdd Product Observation")
     product_id = get_product_id_by_name()
-    source = input("Source: ").strip().lower()
+    # Soucre collection
+    while True:
+        print("\nChoose source:")
+        print("1. TikTok Shop")
+        print("2. Ulta")
+        print("3. Sephora")
+        print("4. Brand Website")
+        source_choice = input("Choose an option (1-4): ").strip()
+        if source_choice == "1":
+            source = "tiktok_shop"
+            break
+        elif source_choice == "2":
+            source = "ulta"
+            break
+        elif source_choice == "3":
+            source = "sephora"
+            break
+        elif source_choice == "4":
+            source = "brand_site"
+            break
+        else:
+            print("Please choose 1, 2, 3, or 4.")
+    source_url = get_url("Source URL: ")
+    # Duplicate checking
+    duplicate = check_duplicate_observation(product_id,source,source_url)
+    if duplicate:
+        print(
+            f"\nWarning: A similar observation already exists "
+            f"(Observation ID: {duplicate[0]}, "
+            f"collected: {duplicate[1]}).")
+        confirm = get_yes_no("Do you still want to continue? (y/n): ")
+        if confirm == 0:
+            print("Observation entry cancelled.")
+            return    
     # Automatically records the date and time the observation is collected.
     collection_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    price_usd = get_positive_float("Price (USD): ")
-    tiktok_units_sold = get_nonnegative_int("TikTok units sold: ")
-    bestseller_list = get_yes_no("On bestseller list? (y/n): ")
-    while True:
-        try:
-            avg_rating = float(input("Average rating (0-5): "))
-
-            if 0 <= avg_rating <= 5:
-                break
-
-            print("Rating must be between 0 and 5.")
-
-        except ValueError:
-            print("Please enter a valid number.")
-    review_count = get_nonnegative_int("Review count: ")
+    price_usd = get_float("Price (USD) - leave blank if unavailable: ", allow_blank=True, allow_zero=True)
+    tiktok_units_sold = get_nonnegative_int("TikTok units sold - leave blank if unavailable: ", allow_blank=True)
+    bestseller_list = get_yes_no( "On bestseller list? (y/n, leave blank if unavailable): ", allow_blank=True)
+    review_count = get_nonnegative_int("Review count - leave blank if unavailable: ", allow_blank=True)
     # Saves the collected observation data as a new row in the product_observations table.
     cursor.execute('''
         INSERT INTO product_observations (
             product_id,
             source,
+            source_url,
             collection_date,
             price_usd,
             tiktok_units_sold,
             bestseller_list,
-            avg_rating,
             review_count
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         product_id,
         source,
+        source_url,
         collection_date,
         price_usd,
         tiktok_units_sold,
         bestseller_list,
-        avg_rating,
         review_count
     ))
     connection.commit()
@@ -208,11 +324,11 @@ def view_observations():
             po.observation_id,
             p.product_name,
             po.source,
+            po.source_url,
             po.collection_date,
             po.price_usd,
             po.tiktok_units_sold,
             po.bestseller_list,
-            po.avg_rating,
             po.review_count
         FROM product_observations po
         JOIN products p
@@ -235,11 +351,10 @@ def menu():
     print("4. View product observations")
     print("5. Exit")
 
-menu()
-
 # Menu choice determines which part of the program runs.
 while True:
-    choice = input("Choose an option(1-5): ")
+    menu()
+    choice = input("Choose an option (1-5): ").strip()
     if choice == "1":
         add_product()
     elif choice == "2":
@@ -252,4 +367,4 @@ while True:
         print("Exiting program")
         break
     else:
-        print("Invalid option")
+        print("Invalid option. Please choose 1-5.")
