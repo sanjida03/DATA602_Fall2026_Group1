@@ -48,6 +48,8 @@ The application will initialize and connect to the SQLite database used to store
 
 The dataset combines **product characteristics** with **consumer demand indicators** collected from multiple public sources.
 
+https://drive.google.com/file/d/1FjLIm28nfKcOfSPkFZTapeecfGn4plPc/view?usp=sharing 
+
 **Product Characteristics**
 - Brand
 - Product name
