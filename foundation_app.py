@@ -190,7 +190,7 @@ def add_product():
     undertone_count = get_positive_int("Undertone count: ")
     finish_options = {"1": "matte", "2": "natural", "3": "satin","4": "radiant", "5": "dewy"}
     finish_type = get_choice("Choose finish type:", finish_options)
-    coverage_options = {"1": "light", "2": "medium", "3": "full"}
+    coverage_options = {"1": "light", "2": "light_to_medium", "3": "medium", "4": "medium_to_full", "5": "full"}
     coverage_level = get_choice( "Choose coverage level:", coverage_options)
     non_comedogenic = get_yes_no("Non-comedogenic? (y/n, leave blank if unknown): ",allow_blank=True )
     skincare_benefits = get_yes_no("Skincare benefits? (y/n, leave blank if unknown): ", allow_blank=True)
