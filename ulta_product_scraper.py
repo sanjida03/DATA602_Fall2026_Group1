@@ -23,47 +23,56 @@ Main responsibilities:
     - Identify skincare ingredients or benefit claims.
     - Extract the product review count.
     - Display the collected product information.
-
 Dependencies:
     - Python 3.14.6 or later
     - requests
     - beautifulsoup4
-
-Input:
-    - Ulta product page URL entered by the user.
-
-Output:
-    - Brand
-    - Product name
-    - Size in ounces
-    - Shade count
-    - Undertone count
-    - Finish type
-    - Coverage level
-    - Wear claim hours
-    - SPF presence
-    - Non-comedogenic status
-    - Skincare benefits
-    - Price
-    - Review count
 """
+
 import json
 import requests
 from bs4 import BeautifulSoup
 import re
+from ulta_bestsellers import bestseller_status
+
+# Undertone Normalization
+# Standardize retailer shade descriptions into three categories.
+def normalize_undertone(description):
+    description = description.lower()
+    # Prioritize explicitly stated primary undertones.
+    primary = re.search(
+        r"\b(warm|cool|neutral)\b",
+        description
+    )
+    if primary:
+        return primary.group(1)
+    # Map alternative descriptions to standard categories.
+    undertone_mapping = {
+        "warm": ["golden", "yellow", "peach", "peachy"],
+        "cool": ["rosy", "pink", "red", "blue"],
+        "neutral": ["balanced", "olive"]
+    }
+    for category, keywords in undertone_mapping.items():
+        for keyword in keywords:
+            if re.search(rf"\b{re.escape(keyword)}\b", description):
+                return category
+    return None
+
+# Convert stored values to Yes/No output.
+def format_yes_no(value):
+    if value is None:
+        return "Unknown"
+    return "Yes" if value == 1 else "No"
 
 # Request Configuration
-# Defining the HTTP request headers.
 HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
 # User Input
-# Collecting the Ulta product URL.
 url = input("Enter Ulta product URL: ").strip()
 
 # Page Request
-# Downloading the product page HTML & confirming that the request was successful.
 response = requests.get(
     url,
     headers=HEADERS,
@@ -73,7 +82,6 @@ response.raise_for_status()
 response.encoding = "utf-8"
 
 # HTML Parsing
-# Converting the downloaded HTML into a BeautifulSoup object for searching.
 soup = BeautifulSoup(
     response.text,
     "html.parser"
@@ -82,51 +90,41 @@ soup = BeautifulSoup(
 # Embedded Product Data
 # Extracting structured foundation variant data from Ulta's JSON-LD script.
 product_json = None
-
 script_tags = soup.find_all(
     "script",
     type="application/ld+json"
 )
-
 for script in script_tags:
     script_text = script.get_text(strip=True)
-
     if '"ProductGroup"' in script_text:
         product_json = json.loads(script_text)
         break
 
+if product_json is None:
+    raise ValueError("ProductGroup JSON-LD data was not found.")
 variants = product_json.get("hasVariant", [])
 
 # Embedded Shade Data
 # Locating the script block containing shade descriptions.
 shade_data_script = None
-
 for script in soup.find_all("script"):
     script_text = script.get_text()
-
     if '"shadeDescription"' in script_text:
         shade_data_script = script_text
         break
 
-print("\n--- Shade Data Script Test ---")
-print("Shade data script found:", shade_data_script is not None)
-
 # Undertone Count
-# Extracting unique undertone categories from embedded shade descriptions.
+# Extract and normalize undertones from Ulta shade descriptions.
 undertones = set()
-
-if shade_data_script:
-    script_text = shade_data_script.lower()
-
-    if "cool" in script_text:
-        undertones.add("cool")
-
-    if "neutral" in script_text:
-        undertones.add("neutral")
-
-    if "warm" in script_text:
-        undertones.add("warm")
-
+shade_descriptions = re.findall(
+    r'"shadeDescription"\s*:\s*"([^"]*)"',
+    shade_data_script or "",
+    flags=re.IGNORECASE
+)
+for description in shade_descriptions:
+    category = normalize_undertone(description)
+    if category:
+        undertones.add(category)
 undertone_count = len(undertones)
 
 # Product Information Section
@@ -167,15 +165,30 @@ price_usd = float(
 )
 
 # Review Count
-# Extracting the number of product reviews.
-review_link = soup.find(
-    "a",
-    href="#reviews"
-)
-review_text = review_link.get_text(strip=True)
-review_count = int(
-    review_text.replace("Reviews", "").replace(",", "").strip()
-)
+# Extract the number of customer reviews from Ulta.
+review_count = None
+
+review_link = soup.find("a", href="#reviews")
+if review_link:
+    review_text = review_link.get("aria-label", "")
+    match = re.search(
+        r"([\d,]+)\s+reviews?\b",
+        review_text,
+        flags=re.IGNORECASE
+    )
+    # Fall back to visible review text if needed.
+    if not match:
+        review_text = review_link.get_text(" ", strip=True)
+        match = re.search(
+            r"([\d,]+)\s+reviews?\b",
+            review_text,
+            flags=re.IGNORECASE
+        )
+    if match:
+        review_count = int(match.group(1).replace(",", ""))
+
+# Bestseller Classification
+bestseller_list = bestseller_status(brand, product_name)
 
 # Size
 # Extracting the product size in ounces.
@@ -238,8 +251,15 @@ if product_summary:
 
 # SPF Present
 # Recording SPF only when explicitly stated on the product page.
-spf_present = None
-if "spf" in page_text or "sun protection factor" in page_text:
+# SPF Presence
+# Detect explicit SPF claims in product information.
+spf_present = 0
+spf_text = f"{product_name} {product_summary.get_text(' ', strip=True) if product_summary else ''}"
+if re.search(
+    r"\bSPF\s*[-:]?\s*\d+\b|\bsun protection factor\s*\d+\b",
+    spf_text,
+    flags=re.IGNORECASE
+):
     spf_present = 1
 
 # Non-Comedogenic
@@ -260,27 +280,51 @@ for term in non_comedogenic_terms:
         break
 
 # Skincare Benefits
-# Recording whether the product explicitly includes skincare ingredients or benefits.
+# Extracting skincare ingredients from Ulta's Key Ingredients section.
+highlighted_ingredients = []
 skincare_benefits = None
 
+# Locate product-specific key ingredients.
+ingredients_match = re.search(
+    r"\bKey Ingredients\s+(.*?)(?=\s+(?:How To Use|How to Use|Ingredients)\b)",
+    page_text,
+    flags=re.IGNORECASE | re.DOTALL
+)
 skincare_terms = [
-    "niacinamide",
-    "vitamin c",
-    "vitamin e",
-    "hyaluronic acid",
-    "retinol",
-    "peptide",
-    "ceramide",
-    "squalane",
-    "salicylic acid",
-    "hydrating",
-    "moisturizing",
-    "skincare benefits"
+    "hydrat",
+    "moistur",
+    "sebum",
+    "oil production",
+    "skin barrier",
+    "dark spots",
+    "fine lines",
+    "wrinkles",
+    "acne",
+    "skin texture"
 ]
-for term in skincare_terms:
-    if term in page_text:
-        skincare_benefits = 1
-        break
+
+if ingredients_match:
+    ingredients_text = ingredients_match.group(1)
+    # Extract ingredient names and their associated descriptions.
+    ingredient_matches = re.findall(
+        r"(?:^|\.\s+)([^:.]{2,100}):\s*(.*?)(?=\.\s+[^:.]{2,100}:|$)",
+        ingredients_text,
+        flags=re.DOTALL
+    )
+    for ingredient, benefit in ingredient_matches:
+        benefit_text = benefit.lower()
+        if any(term in benefit_text for term in skincare_terms):
+            names = re.split(
+                r"\s+and\s+|,\s*",
+                ingredient.strip(),
+                flags=re.IGNORECASE
+            )
+            for name in names:
+                name = name.strip()
+                if name and name not in highlighted_ingredients:
+                    highlighted_ingredients.append(name)
+            skincare_benefits = 1
+
 
 # Product Information Output
 # Displays the extracted foundation characteristics.
@@ -292,16 +336,12 @@ print("Undertones:", sorted(undertones))
 print("Undertone count:", undertone_count)
 print("Price USD:", price_usd)
 print("Review count:", review_count)
+print("Bestseller list:", format_yes_no(bestseller_list))
 print("Size oz:", size_oz)
 print("Finish type:", finish_type)
 print("Coverage level:", coverage_level)
 print("Wear claim hours:", wear_claim_hours)
-print("SPF present:", spf_present)
-print("Non-comedogenic:", non_comedogenic)
-print("Skincare benefits:", skincare_benefits)
-
-# Request Validation Output
-# Displays technical request information.
-print("\n--- Request Information ---")
-print("Status code:", response.status_code)
-print("HTML length:", len(response.text))
+print("Non-comedogenic:", format_yes_no(non_comedogenic))
+print("SPF present:", format_yes_no(spf_present))
+print("Skincare benefits:", format_yes_no(skincare_benefits))
+print("Highlighted ingredients:",", ".join(highlighted_ingredients) if highlighted_ingredients else "Unknown")
