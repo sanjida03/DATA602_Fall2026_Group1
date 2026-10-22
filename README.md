@@ -9,6 +9,30 @@ A Python-based research data pipeline built to analyze the relationships between
 - Relational Data Storage
 - Data Exploration
 
+## Research Question
+Which foundation product characteristics (such as price, shade range, coverage
+level, and celebrity affiliation) are associated with higher consumer demand?
+
+## Project Summary
+This project builds a reusable dataset of liquid foundation products that links
+product characteristics to consumer demand. Data are collected from three
+public sources: TikTok Shop, Ulta, and brand/manufacturer websites. Demand is
+measured with several indicators rather than one: TikTok Shop units sold,
+retailer bestseller status, average rating, and review count. Values that appear
+on more than one source are compared and reconciled instead of taken from a
+single site.
+
+The unit of analysis is one foundation product from a specific brand. Because
+price, units sold, ratings, and bestseller status change over time, each
+observation is stored with its source and collection date, so the dataset can be
+updated rather than frozen as a one-time snapshot. Data are stored in a
+relational SQLite database with a `products` table (characteristics) and a
+`product_observations` table (source-specific demand metrics), linked by
+`product_id`.
+
+Only aggregate product-level information is collected. No customer usernames,
+profiles, or review text are stored.
+
 ### Installation
 
 **Requirements**
