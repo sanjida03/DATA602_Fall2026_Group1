@@ -88,6 +88,9 @@ def scrape_ulta(url):
 
     variants = product_json.get("hasVariant", [])
 
+     # Missing variant data is unknown, not zero available shades.
+    shade_count = len(variants) if variants else None
+    
     # Locate embedded shade descriptions.
     shade_data_script = None
     for script in soup.find_all("script"):
@@ -107,7 +110,9 @@ def scrape_ulta(url):
         category = normalize_undertone(description)
         if category:
             undertones.add(category)
-    undertone_count = len(undertones)
+    
+    # Preserve unknown when no recognized undertones were extracted.
+    undertone_count = len(undertones) if undertones else None
 
     # Locate the main product information section.
     product_info = soup.find(
@@ -163,21 +168,46 @@ def scrape_ulta(url):
     # Check whether the foundation appears on Ulta's bestseller list.
     bestseller_list = bestseller_status(brand, product_name)
 
+    
     # Extract product size in ounces.
+    size_oz = None
     product_dimension = soup.find(
         "div",
         class_="ProductDimension"
     )
-    size_text = product_dimension.find_all("span")[1].get_text(strip=True)
-    size_oz = float(
-        size_text.lower().replace("oz", "").strip()
-    )
+    if product_dimension:
+        size_match = re.search(
+            r"(\d+(?:\.\d+)?)\s*(?:fl\.?\s*)?oz\b",
+            product_dimension.get_text(" ", strip=True),
+            flags=re.IGNORECASE
+        )
+        if size_match:
+            size_oz = float(size_match.group(1))
+    # Fall back to product-specific structured data.
+    if size_oz is None:
+        size_text = product_json.get("size", "")
+        if isinstance(size_text, str):
+            size_match = re.search(
+                r"(\d+(?:\.\d+)?)\s*(?:fl\.?\s*)?oz\b",
+                size_text,
+                flags=re.IGNORECASE
+            )
+            if size_match:
+                size_oz = float(size_match.group(1))
 
-    # Count available product shades.
-    shade_count = len(variants)
 
     # Extract finish and coverage using controlled categories.
     page_text = soup.get_text(" ", strip=True).lower()
+
+        # Product-specific summary used for fallback extraction.
+    product_summary = soup.select_one(
+        "div.ProductSummary__summary"
+    )
+    summary_text = (
+        product_summary.get_text(" ", strip=True).lower()
+        if product_summary else ""
+    )
+
     finish_type = None
     if "matte" in page_text:
         finish_type = "matte"
@@ -202,12 +232,6 @@ def scrape_ulta(url):
         coverage_level = "medium"
     elif "light coverage" in page_text:
         coverage_level = "light"
-
-    # Extract the stated wear duration.
-    product_summary = soup.find(
-        "div",
-        class_="ProductSummary__summary"
-    )
 
     wear_claim_hours = None
     if product_summary:
@@ -279,6 +303,66 @@ def scrape_ulta(url):
             if any(term in benefit_text for term in skincare_terms):
                 skincare_benefits = 1
                 break
+
+# Fallback: Extract missing characteristics from the product summary.
+
+    # Coverage: Recognize descriptions such as "medium, weightless coverage".
+    if coverage_level is None and summary_text:
+        if re.search(r"medium[- ]to[- ]full", summary_text):
+            coverage_level = "medium_to_full"
+        elif re.search(r"light[- ]to[- ]medium", summary_text):
+            coverage_level = "light_to_medium"
+        else:
+            coverage_match = re.search(
+                r"\b(light|medium|full)(?:,\s*\w+)?\s+coverage\b",
+                summary_text
+            )
+            if coverage_match:
+                coverage_level = coverage_match.group(1)
+    # Finish: Use only an explicitly stated finish category.
+    if finish_type is None and summary_text:
+        finish_match = re.search(
+            r"\b(matte|natural|satin|radiant|dewy)\s+finish\b",
+            summary_text
+        )
+        if finish_match:
+            finish_type = finish_match.group(1)
+    # Non-comedogenic: Look for explicit product claims.
+    if non_comedogenic is None and summary_text:
+        if any(term in summary_text for term in non_comedogenic_terms):
+            non_comedogenic = 1
+    # Skincare benefits: Check for explicit claimed improvements.
+    if skincare_benefits is None and summary_text:
+        benefit_terms = [
+            "improves",
+            "improve the look",
+            "hydrates",
+            "hydrating",
+            "moisturizes",
+            "skin barrier",
+            "skin over time"
+        ]
+        if any(term in summary_text for term in benefit_terms):
+            skincare_benefits = 1
+    # Wear duration: Extract a stated number of hours.
+    if wear_claim_hours is None and summary_text:
+        wear_match = re.search(
+            r"\b(\d+)\s*[- ]?\s*hour\s*(?:wear|longwear|longwearing)\b",
+            summary_text
+        )
+        if wear_match:
+            wear_claim_hours = int(wear_match.group(1))
+    # Size: Check the summary only if the primary method failed.
+    if size_oz is None and summary_text:
+        size_match = re.search(
+            r"\b(\d+(?:\.\d+)?)\s*(?:fl\.?\s*oz|oz)\b",
+            summary_text
+        )
+        if size_match:
+            size_oz = float(size_match.group(1))
+    # Warn only after all size extraction methods have been checked.
+    if size_oz is None:
+        print("Warning: Product size could not be extracted.")
 
     # Return values for database insertion.
     return {

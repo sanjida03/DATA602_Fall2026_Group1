@@ -267,9 +267,11 @@ def find_existing_product(data):
     product_name = normalize_product_name(data.get("product_name"))
     size_oz = data.get("size_oz")
 
-    if not brand or not product_name or size_oz is None:
-        print("\nCannot identify product: brand, name, or size is missing.")
-        return None, "incomplete"
+    # Brand and product name are required; size may be unknown.
+    if not brand or not product_name:
+        print("Cannot identify product: brand or name is missing.")
+        print("Product matching stopped. No data saved.")
+        return
 
     # Retrieve existing product characteristics.
     cursor.execute("SELECT * FROM products")

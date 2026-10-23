@@ -23,7 +23,7 @@ cursor.execute('''
         product_id INTEGER PRIMARY KEY AUTOINCREMENT,
         product_name TEXT NOT NULL COLLATE NOCASE,
         brand TEXT NOT NULL COLLATE NOCASE,
-        size_oz REAL NOT NULL CHECK(size_oz > 0),
+        size_oz REAL CHECK(size_oz > 0),
         packaging_material TEXT CHECK (
             packaging_material IN ('glass', 'plastic')
         ),
