@@ -1,127 +1,128 @@
-## Product Characteristics & Consumer Demand Analysis
-A Python-based research data pipeline built to analyze the relationships between cosmetic foundation product characteristics and consumer demand. 
 
-### Core Capabilities
+# Foundation Characteristics & Consumer Demand Analysis
 
-- Structured Data Collection
-- Multi-Source Tracking
-- Input Validation
-- Relational Data Storage
-- Data Exploration
+**What makes one foundation a bestseller while another goes unnoticed?**
 
-## Research Question
-Which foundation product characteristics (such as price, shade range, coverage
-level, and celebrity affiliation) are associated with higher consumer demand?
+We built a Python-based data pipeline that collects and organizes cosmetic foundation characteristics and consumer demand indicators across multiple retailers.
 
-## Project Summary
-This project builds a reusable dataset of liquid foundation products that links
-product characteristics to consumer demand. Data are collected from three
-public sources: TikTok Shop, Ulta, and brand/manufacturer websites. Demand is
-measured with several indicators rather than one: TikTok Shop units sold,
-retailer bestseller status, average rating, and review count. Values that appear
-on more than one source are compared and reconciled instead of taken from a
-single site.
+## Project Overview
 
-The unit of analysis is one foundation product from a specific brand. Because
-price, units sold, ratings, and bestseller status change over time, each
-observation is stored with its source and collection date, so the dataset can be
-updated rather than frozen as a one-time snapshot. Data are stored in a
-relational SQLite database with a `products` table (characteristics) and a
-`product_observations` table (source-specific demand metrics), linked by
-`product_id`.
+### Research Question
 
-Only aggregate product-level information is collected. No customer usernames,
-profiles, or review text are stored.
+**Which foundation product characteristics are associated with higher consumer demand?**
 
-### Installation
+We investigate whether factors such as price, shade range, coverage, finish, and skincare benefits are associated with product popularity.
 
-**Requirements**
+### What Our Project Does
+
+- **Collects** foundation data from Ulta, Sephora, and TikTok Shop.
+- **Matches** the same products across retailers to prevent duplicate records.
+- **Tracks** prices, reviews, bestseller status, and TikTok units sold over time.
+- **Validates** missing values, inconsistencies, and potential data-quality issues.
+- **Stores** structured data in SQLite for future statistical analysis and modeling.
+
+### How It Works
+
+```text
+Ulta • Sephora • TikTok Shop
+            ↓
+     Web Scrapers
+            ↓
+ foundation_app.py
+ Product Matching & Validation
+            ↓
+      foundation.db
+   ┌────────┴────────┐
+   ↓                 ↓
+Products        Observations
+   └────────┬────────┘
+            ↓
+      db_cleaner.py
+   Data Quality Audit
+            ↓
+   Future Data Analysis
+```
+
+### Project Files
+
+| Script | Purpose |
+| --- | --- |
+| `foundation_database.py` | Initializes the SQLite database |
+| `foundation_app.py` | Manages collection, matching, and storage |
+| `ulta_product_scraper.py` | Collects Ulta product data |
+| `sephora_product_scraper.py` | Collects Sephora product data |
+| `tiktok_product_scraper.py` | Collects TikTok Shop product data |
+| `ulta_bestsellers.py` / `sephora_bestsellers.py` | Check retailer bestseller status |
+| `db_cleaner.py` | Identifies potential data-quality problems |
+
+### Expected Output
+
+A reusable SQLite dataset containing:
+
+- **Product characteristics:** Shade range, undertones, coverage, finish, SPF, skincare claims, and packaging.
+- **Consumer demand indicators:** Price, units sold, bestseller status, and review count.
+- **Source tracking:** Retailer, product URL, and collection date.
+
+**Current stage:** Data collection and validation. The dataset will support future exploratory analysis, statistical testing, and predictive modeling.
+
+## Getting Started
+
+### Requirements
+
 - Python 3.14+
 - pip
 - Git
 
-**Core Dependencies**
-- `pandas`
-- `matplotlib`
+### Installation
 
-**Install Dependencies**
-```
-pip install pandas matplotlib
-```
+**1. Clone the repository**
 
-**Run the Application**
-- Clone the repository and navigate to the project directory:
-```
+```bash
 git clone https://github.com/sanjida03/DATA602_Fall2026_Group1.git
 cd DATA602_Fall2026_Group1
 ```
 
-**Run the data collection application**
+**2. Install dependencies**
+
+```bash
+python -m pip install -r requirements.txt
 ```
-python foundation_app.py
-```
-The application will initialize and connect to the SQLite database used to store product characteristics and consumer demand observations.
 
-### Repository Structure
-- `foundation_app.py` | CLI application for product and observation data collection
-- `foundation.db` | SQLite database used to store product and demand data
-- `README.md` | project overview, setup, and usage instructions
-- `requirements.txt` | Python package dependencies
-
-### Data Collected
-
-The dataset combines **product characteristics** with **consumer demand indicators** collected from multiple public sources.
-
-https://drive.google.com/file/d/1FjLIm28nfKcOfSPkFZTapeecfGn4plPc/view?usp=sharing 
-
-**Product Characteristics**
-- Brand
-- Product name
-- Size
-- Shade count
-- Undertone count
-- Finish type
-- Coverage level
-- Packaging material
-- Celebrity founded
-- Non-comedogenic
-- Skincare benefits
-- SPF presence
-- Wear claim hours
-
-**Consumer Demand Indicators**
-- Price
-- TikTok units sold
-- Bestseller status
-- Review count
-- Collection source
-- Collection source URL
-- Collection date
-
-### Data-Pipeline Structure
+The `requirements.txt` file contains:
 
 ```text
-Git Repository
-↓
-foundation_database.py | Creates the SQLite schema
-↓
-foundation_app.py | collects and stores product and observation data
-↓
-clean_validate.py | validates data quality
-↓
-Processed Data
-↓
-Analysis & Visualizations
+pandas
+requests
+beautifulsoup4
 ```
 
-### Data Source
-Product and demand data are collected from multiple public sources, including:
-- **TikTok Shop** | https://shop.tiktok.com/us
-- **Ulta** | https://www.ulta.com/
-- **Sephora** | https://www.sephora.com/
-- **Brand websites**
+### Run the Pipeline
 
-### Database Structure
-- `products` | stores product characteristics
-- `product_observations` | stores source specific demand metrics
-- `product_id` | links observations to the correct product
+Run the following commands in order:
+
+**1. Initialize the SQLite database**
+
+```bash
+python foundation_database.py
+```
+
+**2. Collect foundation data**
+
+```bash
+python foundation_app.py
+```
+
+Select option `1` and enter an Ulta, Sephora, or TikTok Shop product URL. The application collects, matches, and saves the data.
+
+**3. Audit the dataset**
+
+```bash
+python db_cleaner.py
+```
+
+Displays missing values, possible duplicates, standardization issues, and invalid values without modifying the database.
+
+### Additional Documentation
+
+A detailed **Developer & User Guide** covering application functions, data collection rules, and troubleshooting will be linked here when available.
+
