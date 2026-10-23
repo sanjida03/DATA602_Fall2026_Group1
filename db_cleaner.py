@@ -142,23 +142,41 @@ def audit_relationships(products, observations):
     indicators = ["price_usd", "tiktok_units_sold", "bestseller_list", "review_count"]
     if not observations.empty:
         print((observations.groupby("source")[indicators].apply(lambda group: group.isna().mean() * 100)).round(1).to_string())
-    print("Note: TikTok sales missing from Ulta/Sephora is expected, not a scraping failure.")
+    print("Note: TikTok sales data is only available from TikTok Shop, and bestseller status is only collected from Ulta and Sephora. Missing values from unsupported sources are expected, not scraping failures.")
 
-    print("\nRepeated source URLs (review only; repeat collection is allowed):")
-    repeated = observations.loc[observations.duplicated(subset=["product_id", "source", "source_url"], keep=False)]
-    if repeated.empty:
-        print("  None.")
+    # Check TikTok sales coverage by unique product instead of retailer.
+    print("\n" + "=" * 58)
+    print("PRODUCT-LEVEL TIKTOK SALES COVERAGE")
+    print("=" * 58)
+    # Find TikTok observations with recorded units sold.
+    tiktok_observations = observations[
+        (observations["source"] == "tiktok_shop")
+        & (observations["tiktok_units_sold"].notna())
+    ]
+    # Identify products that already have TikTok sales data.
+    products_with_sales = tiktok_observations["product_id"].unique()
+    # Find products still missing TikTok units sold.
+    missing_tiktok = products[
+        ~products["product_id"].isin(products_with_sales)
+    ]
+    total_products = len(products)
+    products_missing = len(missing_tiktok)
+    products_collected = total_products - products_missing
+    print(f"Total unique products: {total_products}")
+    print(f"Products with TikTok sales: {products_collected}")
+    print(f"Products missing TikTok sales: {products_missing}")
+    if total_products > 0:
+        coverage = products_collected / total_products * 100
+        print(f"TikTok sales coverage: {coverage:.1f}%")
+    print("\nProducts requiring TikTok sales collection:")
+    if missing_tiktok.empty:
+        print("All products have recorded TikTok sales.")
     else:
-        print(repeated[["observation_id", "product_id", "source", "collection_date"]].to_string(index=False))
-
-    bad_source = []
-    for row in observations.itertuples(index=False):
-        host = urlparse(str(row.source_url)).hostname or ""
-        expected = {"ulta": "ulta.com", "sephora": "sephora.com", "tiktok_shop": "shop.tiktok.com"}.get(row.source)
-        if expected and not (host == expected or (row.source != "tiktok_shop" and host.endswith("." + expected))):
-            bad_source.append(row.observation_id)
-    print(f"Source/URL hostname mismatches: {bad_source if bad_source else 'None'}")
-
+        print(
+            missing_tiktok[
+                ["product_id", "brand", "product_name"]
+            ].to_string(index=False)
+        )
 
 def main():
     if not DB_PATH.exists():
