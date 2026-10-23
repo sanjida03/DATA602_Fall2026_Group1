@@ -68,26 +68,45 @@ def audit_table(df, table):
 
     # Do not treat a repeated product_id in observations as a duplicate.
     if table == "products":
+        # Identify possible duplicate products, including unknown sizes.
         print("\nPossible duplicate products (review only):")
         found = 0
         records = df.to_dict("records")
         for i, a in enumerate(records):
             for b in records[i + 1:]:
+                # Brand must match.
                 if pd.isna(a["brand"]) or pd.isna(b["brand"]):
                     continue
                 if normalize_name(a["brand"]) != normalize_name(b["brand"]):
                     continue
-                if pd.isna(a["size_oz"]) or pd.isna(b["size_oz"]):
-                    continue
-                if abs(float(a["size_oz"]) - float(b["size_oz"])) > 0.02:
-                    continue
-                score = SequenceMatcher(None, normalize_name(a["product_name"]), normalize_name(b["product_name"])).ratio()
+                # Compare sizes only when both are known.
+                size_a = a["size_oz"]
+                size_b = b["size_oz"]
+                if pd.notna(size_a) and pd.notna(size_b):
+                    if abs(float(size_a) - float(size_b)) > 0.02:
+                        continue
+                # Compare product names.
+                score = SequenceMatcher(
+                    None,
+                    normalize_name(a["product_name"]),
+                    normalize_name(b["product_name"])
+                ).ratio()
+                # Flag possible duplicates for review.
                 if score >= 0.60:
-                    print(f"  IDs {a['product_id']} and {b['product_id']} | similarity {score:.0%}")
-                    print(f"    {a['product_name']} / {b['product_name']}")
+                    print(
+                        f"  IDs {a['product_id']} and {b['product_id']} "
+                        f"| similarity {score:.0%}"
+                    )
+                    print(
+                        f"    {a['product_name']} / {b['product_name']}"
+                    )
+                    print(
+                        f"    Sizes: {size_a} oz / {size_b} oz"
+                    )
                     found += 1
         if not found:
             print("  None flagged by brand + size + name similarity.")
+
 
     print("\nNonstandard categorical values:")
     any_invalid = False
@@ -178,6 +197,128 @@ def audit_relationships(products, observations):
             ].to_string(index=False)
         )
 
+
+# Merge duplicate products while preserving their observations.
+def remove_duplicate_product():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("PRAGMA foreign_keys = ON")
+        print("\nRemove Duplicate Product")
+
+        # Display saved products for selection.
+        products = pd.read_sql_query("""
+            SELECT product_id, brand, product_name, size_oz
+            FROM products
+            ORDER BY product_id
+        """, conn)
+
+        if products.empty:
+            print("No products found.")
+            return
+        print(products.to_string(index=False))
+
+        # Select the original product and duplicate.
+        try:
+            keep_id = int(input("\nProduct ID to keep: "))
+            delete_id = int(input("Duplicate Product ID to remove: "))
+        except ValueError:
+            print("Invalid product ID.")
+            return
+        if keep_id == delete_id:
+            print("Product IDs must be different.")
+            return
+
+        # Verify both product IDs exist.
+        selected = products[
+            products["product_id"].isin([keep_id, delete_id])
+        ]
+        if len(selected) != 2:
+            print("One or both product IDs do not exist.")
+            return
+
+        # Require matching normalized brands and names.
+        original = selected[selected["product_id"] == keep_id].iloc[0]
+        duplicate = selected[selected["product_id"] == delete_id].iloc[0]
+
+        def normalize(value):
+            return " ".join(str(value).casefold().split())
+        if (
+            normalize(original["brand"]) != normalize(duplicate["brand"])
+            or normalize(original["product_name"]) != normalize(duplicate["product_name"])
+        ):
+            print("Products have different brands or names.")
+            print("Automatic merging is blocked to avoid deleting unrelated products.")
+            return
+        # Check for conflicting known sizes.
+        original_size = original["size_oz"]
+        duplicate_size = duplicate["size_oz"]
+        if (
+            pd.notna(original_size)
+            and pd.notna(duplicate_size)
+            and abs(float(original_size) - float(duplicate_size)) > 0.02
+        ):
+            print("Products have different known sizes.")
+            print("Merge cancelled.")
+            return
+        # Count observations that will be transferred.
+        observation_count = conn.execute("""
+            SELECT COUNT(*)
+            FROM product_observations
+            WHERE product_id = ?
+        """, (delete_id,)).fetchone()[0]
+        print(f"\nKeep Product ID: {keep_id}")
+        print(f"Remove Product ID: {delete_id}")
+        print(f"Observations to transfer: {observation_count}")
+        confirmation = input(
+            "\nConfirm merge and removal? (y/n): "
+        ).strip().lower()
+        if confirmation != "y":
+            print("No changes made.")
+            return
+        # Run both changes in one transaction.
+        try:
+            conn.execute("BEGIN")
+            conn.execute("""
+                UPDATE product_observations
+                SET product_id = ?
+                WHERE product_id = ?
+            """, (keep_id, delete_id))
+            conn.execute("""
+                DELETE FROM products
+                WHERE product_id = ?
+            """, (delete_id,))
+            conn.commit()
+            print("\nDuplicate removed successfully.")
+            print(f"All observations are linked to Product ID {keep_id}.")
+        except sqlite3.Error as error:
+            conn.rollback()
+            print(f"Database error: {error}")
+            print("No changes were saved.")
+
+
+# Interactive menu for database analysis and cleanup.
+def cleaning_menu():
+    while True:
+        print("\n" + "=" * 50)
+        print("FOUNDATION DATA ANALYSIS & CLEANUP")
+        print("=" * 50)
+
+        print("1. Analyze database")
+        print("2. Remove duplicate product")
+        print("3. Exit")
+
+        choice = input("\nChoose an option (1-3): ").strip()
+
+        if choice == "1":
+            main()
+        elif choice == "2":
+            remove_duplicate_product()
+        elif choice == "3":
+            print("Exiting database cleanup.")
+            break
+        else:
+            print("Invalid option. Choose 1, 2, or 3.")
+
+
 def main():
     if not DB_PATH.exists():
         print(f"Database not found: {DB_PATH}")
@@ -195,4 +336,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    cleaning_menu()

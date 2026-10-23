@@ -220,6 +220,22 @@ def sizes_match(size_a, size_b):
         return False
     return abs(float(size_a) - float(size_b)) <= 0.02
 
+
+# Identify the same product without treating unknown sizes as equal.
+def same_product(existing_brand, existing_name, existing_size,
+                 new_brand, new_name, new_size):
+    # Brand and product name must match after normalization.
+    if normalize_product_name(existing_brand) != normalize_product_name(new_brand):
+        return False
+    if normalize_product_name(existing_name) != normalize_product_name(new_name):
+        return False
+    # If both sizes are known, compare them normally.
+    if existing_size is not None and new_size is not None:
+        return sizes_match(existing_size, new_size)
+    # Same brand and name with an unknown size is a possible match.
+    return None
+
+
 # Compare available product characteristics to identify possible duplicates.
 def compare_product_characteristics(scraped, existing):
     matching_fields = []
@@ -271,7 +287,7 @@ def find_existing_product(data):
     if not brand or not product_name:
         print("Cannot identify product: brand or name is missing.")
         print("Product matching stopped. No data saved.")
-        return
+        return None, "incomplete"
 
     # Retrieve existing product characteristics.
     cursor.execute("SELECT * FROM products")
@@ -291,14 +307,30 @@ def find_existing_product(data):
         # Brand must match.
         if brand != saved_brand:
             continue
-        # Product sizes must be compatible.
-        if not sizes_match(size_oz, saved_size):
+        # Known sizes must match; unknown sizes require confirmation.
+        size_unknown = size_oz is None or saved_size is None
+        if not size_unknown and not sizes_match(size_oz, saved_size):
             continue
-        # Reuse the product ID when normalized names match exactly.
-        if product_name == saved_name:
+        # Exact name and brand with matching known sizes.
+        if product_name == saved_name and not size_unknown:
             print(f"\nExisting product found: {existing['product_name']}")
             print(f"Product ID: {existing['product_id']}")
             return existing["product_id"], "matched"
+        # Exact name and brand with an unknown size.
+        if product_name == saved_name and size_unknown:
+            print("\nPossible Duplicate Product Found")
+            print(f"Existing Product ID: {existing['product_id']}")
+            print(f"Existing Name: {existing['product_name']}")
+            print(f"Existing Size: {saved_size} oz")
+            print(f"Scraped Size: {size_oz} oz")
+            confirmation = get_yes_no(
+                "\nIs this the same foundation? (y/n): "
+            )
+            if confirmation == 1:
+                print(f"\nUsing existing Product ID: {existing['product_id']}")
+                return existing["product_id"], "matched"
+            continue
+
         # Compare characteristics when product names differ.
         matching_fields = compare_product_characteristics(
             data, existing
