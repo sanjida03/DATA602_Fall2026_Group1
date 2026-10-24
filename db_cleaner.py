@@ -446,6 +446,183 @@ def delete_column():
             print(f"Database error: {error}")
             print("No changes were saved.")
 
+# Correct verified product characteristics without deleting records.
+def edit_product_characteristics():
+    fields = {
+        "1": ("size_oz", "float"),
+        "2": ("packaging_material", "choice"),
+        "3": ("shade_count", "integer"),
+        "4": ("undertone_count", "integer"),
+        "5": ("finish_type", "choice"),
+        "6": ("coverage_level", "choice"),
+        "7": ("non_comedogenic", "boolean"),
+        "8": ("skincare_benefits", "boolean"),
+        "9": ("spf_present", "boolean"),
+        "10": ("wear_claim_hours", "integer")
+    }
+    choices = {
+        "packaging_material": {"glass", "plastic"},
+        "finish_type": {
+            "matte", "natural", "satin", "radiant", "dewy"
+        },
+        "coverage_level": {
+            "light", "light_to_medium", "medium",
+            "medium_to_full", "full"
+        }
+    }
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        # Display products to identify the record.
+        products = pd.read_sql_query("""
+            SELECT product_id, brand, product_name, size_oz
+            FROM products
+            ORDER BY product_id
+        """, conn)
+        if products.empty:
+            print("No products found.")
+            return
+
+        print("\nSaved Products")
+        print(products.to_string(index=False))
+        print("\nEnter 0 to return to menu or q to exit.")
+
+        value = get_cleanup_input("\nProduct ID to edit: ")
+        if value is None:
+            return
+        try:
+            product_id = int(value)
+        except ValueError:
+            print("Invalid product ID.")
+            return
+        product = conn.execute(
+            "SELECT * FROM products WHERE product_id = ?",
+            (product_id,)
+        ).fetchone()
+        if product is None:
+            print("Product ID not found.")
+            return
+
+        print(f"\nEditing Product ID: {product_id}")
+        print(f"Brand: {product['brand']}")
+        print(f"Product: {product['product_name']}")
+
+        # Display current product characteristics.
+        print("\nCurrent Product Characteristics")
+
+        for number, (field, data_type) in fields.items():
+            current = product[field]
+            display = "Unknown" if current is None else current
+            print(f"{number}. {field}: {display}")
+
+        print("0. Return to menu")
+        print("q. Exit program")
+        selection = get_cleanup_input(
+            "\nChoose a characteristic to edit: "
+        )
+        if selection is None:
+            return
+        if selection not in fields:
+            print("Invalid characteristic selection.")
+            return
+        field, data_type = fields[selection]
+        old_value = product[field]
+
+        # Display controlled categorical options.
+        if field in choices:
+            print("\nAllowed values:")
+            print(", ".join(sorted(choices[field])))
+
+        elif data_type == "boolean":
+            print("\nAllowed values: yes, no, 1, 0")
+
+        print("\nEnter NULL if the value is unknown.")
+        print("Enter 'back' to cancel or q to exit.")
+
+        entered = input(
+            f"\nNew value for {field}: "
+        ).strip()
+        if entered.lower() == "q":
+            raise SystemExit(0)
+        if entered.lower() == "back":
+            print("Edit cancelled.")
+            return
+
+        # Validate the corrected value.
+        try:
+            if entered.lower() in ("null", "unknown"):
+                new_value = None
+            elif data_type == "boolean":
+                values = {
+                    "yes": 1,
+                    "y": 1,
+                    "1": 1,
+                    "no": 0,
+                    "n": 0,
+                    "0": 0
+                }
+                if entered.lower() not in values:
+                    raise ValueError("Enter yes, no, 1, or 0.")
+                new_value = values[entered.lower()]
+            elif data_type == "choice":
+                new_value = entered.lower()
+                if new_value not in choices[field]:
+                    raise ValueError("Invalid category.")
+            elif data_type == "integer":
+                new_value = int(entered)
+                if new_value < 0:
+                    raise ValueError("Value cannot be negative.")
+                if field == "undertone_count" and new_value > 3:
+                    raise ValueError(
+                        "Undertone count must be between 0 and 3."
+                    )
+                if field == "shade_count" and new_value == 0:
+                    raise ValueError(
+                        "Shade count must be positive."
+                    )
+                if field == "wear_claim_hours" and new_value == 0:
+                    raise ValueError(
+                        "Wear duration must be positive."
+                    )
+            elif data_type == "float":
+                new_value = float(entered)
+
+                if not 0 < new_value < float("inf"):
+                    raise ValueError(
+                        "Size must be a positive finite number."
+                    )
+        except ValueError as error:
+            print(f"Invalid value: {error}")
+            print("No changes made.")
+            return
+
+        # Show the proposed correction.
+        print("\nConfirm Product Correction")
+        print(f"Product ID: {product_id}")
+        print(f"Characteristic: {field}")
+        print(f"Previous value: {old_value}")
+        print(f"New value: {new_value}")
+
+        confirmation = get_cleanup_input(
+            "\nSave this correction? (y/n, 0=menu, q=exit): "
+        )
+        if confirmation is None or confirmation.lower() != "y":
+            print("Edit cancelled. No changes made.")
+            return
+        # Update only the selected characteristic.
+        try:
+            conn.execute(
+                f'UPDATE products SET "{field}" = ? '
+                'WHERE product_id = ?',
+                (new_value, product_id)
+            )
+            conn.commit()
+            print("\nProduct characteristic updated successfully.")
+        except sqlite3.Error as error:
+            conn.rollback()
+            print(f"Database error: {error}")
+            print("No changes were saved.")
+
+
 # Interactive menu for database analysis and cleanup.
 def cleaning_menu():
     while True:
@@ -454,26 +631,110 @@ def cleaning_menu():
         print("=" * 50)
 
         print("1. Analyze database")
-        print("2. Delete product")
-        print("3. Delete observation")
-        print("4. Delete column")
-        print("5. Exit")
+        print("2. Edit product characteristics")
+        print("3. Delete product")
+        print("4. Delete observation")
+        print("5. Delete column")
+        print("6. Exit")
 
-        choice = input("\nChoose an option (1-5, q=exit): ").strip().lower()
+        choice = input(
+            "\nChoose an option (1-6, q=exit): "
+        ).strip().lower()
 
         if choice == "1":
             main()
         elif choice == "2":
-            delete_product()
+            edit_product_characteristics()
         elif choice == "3":
-            delete_observation()
+            delete_product()
         elif choice == "4":
+            delete_observation()
+        elif choice == "5":
             delete_column()
-        elif choice in ("5", "q"):
+        elif choice in ("6", "q"):
             print("Exiting database cleanup.")
             break
         else:
-            print("Invalid option. Choose 1-5 or q.")
+            print("Invalid option. Choose 1-6 or q.")
+
+
+# Identify missing fields for each product and observation.
+def report_missing_records(products, observations):
+    print("\n" + "=" * 58)
+    print("MISSING DATA BY RECORD")
+    print("=" * 58)
+
+    # Product fields that should be checked for missing values.
+    product_fields = [
+        "size_oz",
+        "packaging_material",
+        "shade_count",
+        "undertone_count",
+        "finish_type",
+        "coverage_level",
+        "non_comedogenic",
+        "skincare_benefits",
+        "spf_present",
+        "wear_claim_hours"
+    ]
+    print("\nPRODUCTS REQUIRING REVIEW")
+    product_count = 0
+    for _, product in products.iterrows():
+        missing = []
+        for field in product_fields:
+            if field not in products.columns:
+                continue
+            value = product[field]
+            if pd.isna(value) or (
+                isinstance(value, str)
+                and value.strip().lower() in ("", "unknown", "n/a")
+            ):
+                missing.append(field)
+        if missing:
+            product_count += 1
+            print(
+                f"\nProduct ID {product['product_id']} — "
+                f"{product['brand']}: {product['product_name']}"
+            )
+            print(f"  Missing: {', '.join(missing)}")
+    if product_count == 0:
+        print("No missing product characteristics found.")
+    else:
+        print(f"\nProducts requiring review: {product_count}")
+
+    # Observation fields relevant to Ulta and Sephora.
+    observation_fields = [
+        "price_usd",
+        "bestseller_list",
+        "review_count",
+        "source_url",
+        "collection_date"
+    ]
+    print("\nOBSERVATIONS REQUIRING REVIEW")
+    observation_count = 0
+    for _, observation in observations.iterrows():
+        missing = []
+        for field in observation_fields:
+            if field not in observations.columns:
+                continue
+            value = observation[field]
+            if pd.isna(value) or (
+                isinstance(value, str)
+                and value.strip().lower() in ("", "unknown", "n/a")
+            ):
+                missing.append(field)
+        if missing:
+            observation_count += 1
+            print(
+                f"\nObservation ID {observation['observation_id']} "
+                f"— Product ID {observation['product_id']} "
+                f"({observation['source']})"
+            )
+            print(f"  Missing: {', '.join(missing)}")
+    if observation_count == 0:
+        print("No missing observation fields found.")
+    else:
+        print(f"\nObservations requiring review: {observation_count}")
 
 def main():
     if not DB_PATH.exists():
@@ -484,10 +745,12 @@ def main():
         products = pd.read_sql_query("SELECT * FROM products", conn)
         observations = pd.read_sql_query("SELECT * FROM product_observations", conn)
 
-    print("FOUNDATION DATA QUALITY AUDIT — READ ONLY")
+    print("FOUNDATION DATA QUALITY AUDIT *READ ONLY*")
     audit_table(products, "products")
     audit_table(observations, "product_observations")
     audit_relationships(products, observations)
+    # Identify exactly which records contain missing values.
+    report_missing_records(products, observations)
     print("\nAudit complete. No database values were changed.")
 
 if __name__ == "__main__":

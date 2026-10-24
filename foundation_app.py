@@ -566,7 +566,7 @@ def save_product_and_observation(data, product_id, source, url):
                 bestseller_list,
                 review_count
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (
             product_id,
             source,

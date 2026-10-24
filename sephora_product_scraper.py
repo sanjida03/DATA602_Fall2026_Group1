@@ -262,6 +262,73 @@ def scrape_sephora(url):
                 skincare_benefits = 1
                 break
 
+    # Fallback: Check Sephora product highlights for missing claims.
+    
+    # Locate the product highlights using their text labels.
+    highlights = []
+
+    for section in soup.select('div[data-comp^="BaseComponent"]'):
+        labels = [
+            span.get_text(" ", strip=True).lower()
+            for span in section.find_all("span", recursive=False)
+        ]
+
+        # Product highlights contain multiple short characteristic labels.
+        if len(labels) >= 2 and any(
+            "coverage" in label or
+            "finish" in label or
+            "spf" == label or
+            "hydrating" == label or
+            label.startswith("good for:")
+            for label in labels
+        ):
+            highlights = labels
+            break
+
+    # Skincare benefits: Accept explicit skin-benefit highlights.
+    if skincare_benefits is None or skincare_benefits == 0:
+        skincare_highlights = {
+            "hydrating",
+            "moisturizing",
+            "good for: uneven texture",
+            "good for: dryness",
+            "good for: pores",
+            "good for: dullness",
+            "good for: redness",
+            "good for: dark spots",
+            "good for: fine lines"
+        }
+
+        if any(
+            highlight in skincare_highlights
+            for highlight in highlights
+        ):
+            skincare_benefits = 1
+
+    # SPF: Accept a dedicated SPF highlight.
+    if spf_present is None or spf_present == 0:
+        if any(
+            highlight == "spf" or
+            re.fullmatch(r"spf\s*\d+", highlight)
+            for highlight in highlights
+        ):
+            spf_present = 1
+
+    # Non-comedogenic: Require an explicit claim.
+    if non_comedogenic is None or non_comedogenic == 0:
+        non_comedogenic_highlights = {
+            "non-comedogenic",
+            "noncomedogenic",
+            "won't clog pores",
+            "non-pore-clogging"
+        }
+
+        if any(
+            highlight in non_comedogenic_highlights
+            for highlight in highlights
+        ):
+            non_comedogenic = 1
+
     # Return values for database insertion.
     return {
         "brand": brand,
