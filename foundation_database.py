@@ -55,12 +55,11 @@ cursor.execute('''
         observation_id INTEGER PRIMARY KEY AUTOINCREMENT,
         product_id INTEGER NOT NULL,
         source TEXT NOT NULL CHECK (
-            source IN ('tiktok_shop', 'ulta', 'sephora', 'brand_site')
+            source IN ('ulta', 'sephora', 'brand_site')
         ),
         source_url TEXT NOT NULL,
         collection_date TEXT NOT NULL,
         price_usd REAL CHECK(price_usd >= 0),
-        tiktok_units_sold INTEGER CHECK(tiktok_units_sold >= 0),
         bestseller_list INTEGER CHECK(bestseller_list IN (0,1)),
         review_count INTEGER CHECK(review_count >= 0),
         FOREIGN KEY (product_id) REFERENCES products(product_id)

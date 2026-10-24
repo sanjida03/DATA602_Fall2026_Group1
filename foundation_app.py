@@ -5,7 +5,7 @@ Date: 2026-10-23
 Project: Foundation Characteristics & Consumer Demand
 Description:
     Command-line application for collecting foundation product data
-    from Ulta, Sephora, and TikTok Shop using product URLs.
+    from Ulta and Sephora using product URLs.
 
 Main responsibilities:
     - Identify retailers and run the corresponding web scraper.
@@ -45,8 +45,6 @@ import pandas as pd
 
 from ulta_product_scraper import scrape_ulta, format_yes_no
 from sephora_product_scraper import scrape_sephora
-from tiktok_product_scraper import scrape_tiktok
-
 
 # Connect to the existing SQLite database.
 connection = sqlite3.connect("foundation.db")
@@ -161,7 +159,6 @@ def view_observations():
             po.source_url,
             po.collection_date,
             po.price_usd,
-            po.tiktok_units_sold,
             po.bestseller_list,
             po.review_count
         FROM product_observations po
@@ -566,7 +563,6 @@ def save_product_and_observation(data, product_id, source, url):
                 source_url,
                 collection_date,
                 price_usd,
-                tiktok_units_sold,
                 bestseller_list,
                 review_count
             )
@@ -577,7 +573,6 @@ def save_product_and_observation(data, product_id, source, url):
             url,
             collection_date,
             data.get("price_usd"),
-            data.get("tiktok_units_sold"),
             data.get("bestseller_list"),
             data.get("review_count")
         ))
@@ -609,9 +604,6 @@ def add_product_by_url():
     elif hostname == "sephora.com" or hostname.endswith(".sephora.com"):
         source = "sephora"
         data = scrape_sephora(url)
-    elif hostname == "shop.tiktok.com":
-        source = "tiktok_shop"
-        data = scrape_tiktok(url)
     else:
         print("Unsupported retailer URL.")
         return

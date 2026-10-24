@@ -19,7 +19,7 @@ VALID_CATEGORIES = {
     "packaging_material": {"glass", "plastic"},
     "finish_type": {"matte", "natural", "satin", "radiant", "dewy"},
     "coverage_level": {"light", "light_to_medium", "medium", "medium_to_full", "full"},
-    "source": {"ulta", "sephora", "tiktok_shop", "brand_site"},
+    "source": {"ulta", "sephora", "brand_site"},
 }
 BOOLEAN_COLUMNS = {
     "products": ["non_comedogenic", "skincare_benefits", "spf_present"],
@@ -27,7 +27,7 @@ BOOLEAN_COLUMNS = {
 }
 NUMERIC_COLUMNS = {
     "products": ["size_oz", "shade_count", "undertone_count", "wear_claim_hours"],
-    "product_observations": ["price_usd", "tiktok_units_sold", "review_count"],
+    "product_observations": ["price_usd", "review_count"],
 }
 
 
@@ -158,86 +158,165 @@ def audit_relationships(products, observations):
         print(bad_dates[["observation_id", "collection_date"]].to_string(index=False))
 
     print("\nMissing observation indicators by retailer (%):")
-    indicators = ["price_usd", "tiktok_units_sold", "bestseller_list", "review_count"]
+    indicators = ["price_usd", "bestseller_list", "review_count"]
     if not observations.empty:
         print((observations.groupby("source")[indicators].apply(lambda group: group.isna().mean() * 100)).round(1).to_string())
-    print("Note: TikTok sales data is only available from TikTok Shop, and bestseller status is only collected from Ulta and Sephora. Missing values from unsupported sources are expected, not scraping failures.")
+    print("Note: Bestseller status and review count are collected from Ulta and Sephora. Missing values indicate unavailable or unverified data and should be reviewed, not automatically treated as scraping failures.")
 
-    # Check TikTok sales coverage by unique product instead of retailer.
-    print("\n" + "=" * 58)
-    print("PRODUCT-LEVEL TIKTOK SALES COVERAGE")
-    print("=" * 58)
-    # Find TikTok observations with recorded units sold.
-    tiktok_observations = observations[
-        (observations["source"] == "tiktok_shop")
-        & (observations["tiktok_units_sold"].notna())
-    ]
-    # Identify products that already have TikTok sales data.
-    products_with_sales = tiktok_observations["product_id"].unique()
-    # Find products still missing TikTok units sold.
-    missing_tiktok = products[
-        ~products["product_id"].isin(products_with_sales)
-    ]
-    total_products = len(products)
-    products_missing = len(missing_tiktok)
-    products_collected = total_products - products_missing
-    print(f"Total unique products: {total_products}")
-    print(f"Products with TikTok sales: {products_collected}")
-    print(f"Products missing TikTok sales: {products_missing}")
-    if total_products > 0:
-        coverage = products_collected / total_products * 100
-        print(f"TikTok sales coverage: {coverage:.1f}%")
-    print("\nProducts requiring TikTok sales collection:")
-    if missing_tiktok.empty:
-        print("All products have recorded TikTok sales.")
-    else:
-        print(
-            missing_tiktok[
-                ["product_id", "brand", "product_name"]
-            ].to_string(index=False)
-        )
+# Allow users to cancel an operation or exit the program.
+def get_cleanup_input(prompt):
+    value = input(prompt).strip()
+    if value.lower() == "q":
+        print("Exiting database cleanup.")
+        raise SystemExit(0)
+    if value == "0":
+        print("Operation cancelled. Returning to menu.")
+        return None
+    return value
 
-
-# Merge duplicate products while preserving their observations.
-def remove_duplicate_product():
+# Delete a product and its associated observations by product ID.
+def delete_product():
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("PRAGMA foreign_keys = ON")
-        print("\nRemove Duplicate Product")
 
-        # Display saved products for selection.
+        print("\nSaved Products")
+
         products = pd.read_sql_query("""
             SELECT product_id, brand, product_name, size_oz
             FROM products
             ORDER BY product_id
         """, conn)
-
         if products.empty:
             print("No products found.")
             return
         print(products.to_string(index=False))
-
-        # Select the original product and duplicate.
+        print("\nEnter 0 to return to menu or q to exit.")
+        value = get_cleanup_input("\nProduct ID to remove: ")
+        if value is None:
+            return
         try:
-            keep_id = int(input("\nProduct ID to keep: "))
-            delete_id = int(input("Duplicate Product ID to remove: "))
+            product_id = int(value)
         except ValueError:
             print("Invalid product ID.")
             return
-        if keep_id == delete_id:
-            print("Product IDs must be different.")
+
+        selected = products[products["product_id"] == product_id]
+
+        if selected.empty:
+            print("Product ID not found.")
+            return
+        product = selected.iloc[0]
+        observation_count = conn.execute("""
+            SELECT COUNT(*)
+            FROM product_observations
+            WHERE product_id = ?
+        """, (product_id,)).fetchone()[0]
+        print("\nProduct Selected for Deletion")
+        print(f"Product ID: {product_id}")
+        print(f"Brand: {product['brand']}")
+        print(f"Product Name: {product['product_name']}")
+        print(f"Associated Observations: {observation_count}")
+
+        confirmation = get_cleanup_input(
+            "\nDelete this product and all its observations? (y/n, 0=menu, q=exit): "
+        )
+        if confirmation is None:
+            return
+        confirmation = confirmation.lower()
+
+        if confirmation != "y":
+            print("Deletion cancelled. No changes made.")
             return
 
-        # Verify both product IDs exist.
-        selected = products[
-            products["product_id"].isin([keep_id, delete_id])
+        try:
+            conn.execute("BEGIN")
+
+            # Remove observations before deleting the product.
+            conn.execute("""
+                DELETE FROM product_observations
+                WHERE product_id = ?
+            """, (product_id,))
+
+            conn.execute("""
+                DELETE FROM products
+                WHERE product_id = ?
+            """, (product_id,))
+
+            conn.commit()
+            print("\nProduct and associated observations deleted.")
+
+        except sqlite3.Error as error:
+            conn.rollback()
+            print(f"Database error: {error}")
+            print("No changes were saved.")
+
+
+# Delete a single observation by observation ID.
+def delete_observation():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("PRAGMA foreign_keys = ON")
+        print("\nSaved Product Observations")
+        observations = pd.read_sql_query("""
+            SELECT
+                o.observation_id,
+                o.product_id,
+                p.brand,
+                p.product_name,
+                o.source,
+                o.collection_date,
+                o.price_usd,
+                o.bestseller_list,
+                o.review_count
+            FROM product_observations AS o
+            JOIN products AS p
+                ON o.product_id = p.product_id
+            ORDER BY o.observation_id
+        """, conn)
+        if observations.empty:
+            print("No observations found.")
+            return
+        print(observations.to_string(index=False))
+        print("\nEnter 0 to return to menu or q to exit.")
+        value = get_cleanup_input("\nObservation ID to remove: ")
+        if value is None:
+            return
+        try:
+            observation_id = int(value)
+        except ValueError:
+            print("Invalid observation ID.")
+            return
+        selected = observations[
+            observations["observation_id"] == observation_id
         ]
-        if len(selected) != 2:
-            print("One or both product IDs do not exist.")
+        if selected.empty:
+            print("Observation ID not found.")
             return
-
-        # Require matching normalized brands and names.
-        original = selected[selected["product_id"] == keep_id].iloc[0]
-        duplicate = selected[selected["product_id"] == delete_id].iloc[0]
+        observation = selected.iloc[0]
+        print("\nObservation Selected for Deletion")
+        print(f"Observation ID: {observation_id}")
+        print(f"Product: {observation['brand']} - {observation['product_name']}")
+        print(f"Retailer: {observation['source']}")
+        print(f"Collection Date: {observation['collection_date']}")
+        confirmation = get_cleanup_input(
+            "\nDelete this observation? (y/n, 0=menu, q=exit): "
+        )
+        if confirmation is None:
+            return
+        confirmation = confirmation.lower()
+        if confirmation != "y":
+            print("Deletion cancelled. No changes made.")
+            return
+        try:
+            conn.execute("""
+                DELETE FROM product_observations
+                WHERE observation_id = ?
+            """, (observation_id,))
+            conn.commit()
+            print("\nObservation deleted successfully.")
+        except sqlite3.Error as error:
+            conn.rollback()
+            print(f"Database error: {error}")
+            print("No changes were saved.")
 
         def normalize(value):
             return " ".join(str(value).casefold().split())
@@ -294,30 +373,107 @@ def remove_duplicate_product():
             print(f"Database error: {error}")
             print("No changes were saved.")
 
+# Delete a selected database column while preserving its records.
+def delete_column():
+    print("\nDelete Database Column")
+    print("1. Products")
+    print("2. Product Observations")
+    print("0. Return to menu")
+    print("q. Exit program")
+
+    choice = get_cleanup_input("\nSelect table (1-2): ")
+
+    if choice is None:
+        return
+    tables = {
+        "1": "products",
+        "2": "product_observations"
+    }
+    table_name = tables.get(choice)
+    if table_name is None:
+        print("Invalid table selection.")
+        return
+    with sqlite3.connect(DB_PATH) as conn:
+        # Display available columns.
+        columns = [
+            row[1]
+            for row in conn.execute(
+                f"PRAGMA table_info({table_name})"
+            )
+        ]
+        print(f"\nColumns in {table_name}:")
+        for column in columns:
+            print(f"- {column}")
+        column_name = get_cleanup_input(
+            "\nColumn name to remove (0=menu, q=exit): "
+        )
+        if column_name is None:
+            return
+        if column_name not in columns:
+            print("Column not found.")
+            return
+
+        # Protect primary and foreign key relationships.
+        protected_columns = {
+            "product_id",
+            "observation_id"
+        }
+        if column_name in protected_columns:
+            print("Cannot delete an ID column.")
+            return
+        print("\nColumn Selected for Deletion")
+        print(f"Table: {table_name}")
+        print(f"Column: {column_name}")
+        print("All values stored in this column will be deleted.")
+
+        confirmation = get_cleanup_input(
+            "\nConfirm column deletion? (y/n, 0=menu, q=exit): "
+        )
+        if confirmation is None or confirmation.lower() != "y":
+            print("Deletion cancelled. No changes made.")
+            return
+        try:
+            # SQLite requires column names in SQL rather than parameters.
+            # Names are validated against the table schema above.
+            conn.execute(
+                f'ALTER TABLE "{table_name}" '
+                f'DROP COLUMN "{column_name}"'
+            )
+            conn.commit()
+            print(f"\nColumn '{column_name}' deleted successfully.")
+        except sqlite3.Error as error:
+            conn.rollback()
+            print(f"Database error: {error}")
+            print("No changes were saved.")
 
 # Interactive menu for database analysis and cleanup.
 def cleaning_menu():
     while True:
         print("\n" + "=" * 50)
-        print("FOUNDATION DATA ANALYSIS & CLEANUP")
+        print("FOUNDATION DATABASE ANALYSIS & CLEANUP")
         print("=" * 50)
 
         print("1. Analyze database")
-        print("2. Remove duplicate product")
-        print("3. Exit")
+        print("2. Delete product")
+        print("3. Delete observation")
+        print("4. Delete column")
+        print("5. Exit")
 
-        choice = input("\nChoose an option (1-3): ").strip()
+        choice = input("\nChoose an option (1-5, q=exit): ").strip().lower()
 
         if choice == "1":
             main()
         elif choice == "2":
-            remove_duplicate_product()
+            delete_product()
         elif choice == "3":
+            delete_observation()
+        elif choice == "4":
+            delete_column()
+        elif choice in ("5", "q"):
             print("Exiting database cleanup.")
             break
         else:
-            print("Invalid option. Choose 1, 2, or 3.")
-
+            print("Invalid option. Choose 1-5 or q.")
 
 def main():
     if not DB_PATH.exists():
@@ -333,7 +489,6 @@ def main():
     audit_table(observations, "product_observations")
     audit_relationships(products, observations)
     print("\nAudit complete. No database values were changed.")
-
 
 if __name__ == "__main__":
     cleaning_menu()
