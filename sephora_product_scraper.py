@@ -111,13 +111,23 @@ def scrape_sephora(url):
                 except (ValueError, TypeError):
                     pass
 
-    # Extract customer review count from JSON-LD.
+    
+   # Extract customer review count and average rating from JSON-LD.
     review_count = None
+    avg_rating = None
+
     rating_data = product_json.get("aggregateRating", {})
+
     if rating_data:
+        # Review count
         review_count_value = rating_data.get("reviewCount")
         if review_count_value is not None:
             review_count = int(review_count_value)
+
+        # Average customer rating
+        rating_value = rating_data.get("ratingValue")
+        if rating_value is not None:
+            avg_rating = float(rating_value)
 
     # Check whether the foundation appears on Sephora's bestseller list.
     product_id_match = re.search(r"P\d+", url)
@@ -344,5 +354,6 @@ def scrape_sephora(url):
         "spf_present": spf_present,
         "price_usd": price_usd,
         "review_count": review_count,
+        "avg_rating": avg_rating,
         "bestseller_list": bestseller_list
     }

@@ -160,7 +160,8 @@ def view_observations():
             po.collection_date,
             po.price_usd,
             po.bestseller_list,
-            po.review_count
+            po.review_count,
+            po.avg_rating
         FROM product_observations po
         JOIN products p
             ON po.product_id = p.product_id
@@ -487,6 +488,45 @@ def reconcile_characteristics(product_id, data, source, url):
             print(f"Kept existing {field}: {saved_value}")
 
 
+# Fill missing values in an existing observation without replacing known data.
+def fill_missing_observation(observation_id, data):
+    fields = (
+        "price_usd",
+        "bestseller_list",
+        "review_count",
+        "avg_rating"
+    )
+
+    updates = {
+        field: data[field]
+        for field in fields
+        if data.get(field) is not None
+    }
+
+    if not updates:
+        print("No new observation values available.")
+        return
+
+    # COALESCE preserves existing values and fills only NULL fields.
+    cursor.execute('''
+        UPDATE product_observations
+        SET
+            price_usd = COALESCE(price_usd, ?),
+            bestseller_list = COALESCE(bestseller_list, ?),
+            review_count = COALESCE(review_count, ?),
+            avg_rating = COALESCE(avg_rating, ?)
+        WHERE observation_id = ?
+    ''', (
+        data.get("price_usd"),
+        data.get("bestseller_list"),
+        data.get("review_count"),
+        data.get("avg_rating"),
+        observation_id
+    ))
+
+    connection.commit()
+    print(f"Missing values updated for observation {observation_id}.")
+
 # Save one unique product and its source-specific observation.
 def save_product_and_observation(data, product_id, source, url):
     # Warn when an observation was previously collected from the same URL.
@@ -499,12 +539,25 @@ def save_product_and_observation(data, product_id, source, url):
                 f"\nPrevious observation found: ID {duplicate[0]}"
                 f" | Collected: {duplicate[1]}"
             )
-            confirm = get_yes_no(
-                "Save another observation? (y/n): "
-            )
-            if confirm == 0:
-                print("Collection cancelled.")
-                return
+            
+            print("\nObservation Options")
+            print("1. Fill missing values in existing observation")
+            print("2. Save a new observation")
+            print("3. Cancel")
+
+            while True:
+                choice = input("Choose an option (1-3): ").strip()
+                if choice == "1":
+                    fill_missing_observation(duplicate[0], data)
+                    return
+                elif choice == "2":
+                    break
+                elif choice == "3":
+                    print("Collection cancelled.")
+                    return
+                else:
+                    print("Invalid option. Enter 1, 2, or 3.")
+
 
     # Record the observation collection date and time.
     collection_date = datetime.now().strftime(
@@ -564,17 +617,19 @@ def save_product_and_observation(data, product_id, source, url):
                 collection_date,
                 price_usd,
                 bestseller_list,
-                review_count
+                review_count,
+                avg_rating
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             product_id,
             source,
             url,
-            collection_date,
+            datetime.now().isoformat(),
             data.get("price_usd"),
             data.get("bestseller_list"),
-            data.get("review_count")
+            data.get("review_count"),
+            data.get("avg_rating")
         ))
         observation_id = cursor.lastrowid
         # Save characteristic updates and observation together.

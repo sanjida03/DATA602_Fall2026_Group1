@@ -164,6 +164,22 @@ def scrape_ulta(url):
             )
         if match:
             review_count = int(match.group(1).replace(",", ""))
+    
+    # Extract average customer rating from the review stars.
+    avg_rating = None
+
+    review_stars = soup.select_one("div.ReviewStars")
+    if review_stars:
+        rating_tag = review_stars.select_one(
+            "div.ReviewStars__Content span"
+        )
+        if rating_tag:
+            try:
+                rating = float(rating_tag.get_text(strip=True))
+                if 0 <= rating <= 5:
+                    avg_rating = rating
+            except ValueError:
+                pass
 
     # Check whether the foundation appears on Ulta's bestseller list.
     bestseller_list = bestseller_status(brand, product_name)
@@ -379,5 +395,6 @@ def scrape_ulta(url):
         "spf_present": spf_present,
         "price_usd": price_usd,
         "review_count": review_count,
+        "avg_rating": avg_rating,
         "bestseller_list": bestseller_list
     }

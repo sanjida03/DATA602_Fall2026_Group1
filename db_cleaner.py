@@ -27,8 +27,9 @@ BOOLEAN_COLUMNS = {
 }
 NUMERIC_COLUMNS = {
     "products": ["size_oz", "shade_count", "undertone_count", "wear_claim_hours"],
-    "product_observations": ["price_usd", "review_count"],
+    "product_observations": ["price_usd", "review_count", "avg_rating"],
 }
+
 
 
 def normalize_name(value):
@@ -133,9 +134,12 @@ def audit_table(df, table):
     for col in NUMERIC_COLUMNS[table]:
         numbers = pd.to_numeric(df[col], errors="coerce")
         invalid_text = df[col].notna() & numbers.isna()
-        bad_range = numbers.lt(0) if table == "product_observations" else numbers.le(0)
+        bad_range = (numbers.lt(0) if table == "product_observations" else numbers.le(0))
         if col == "undertone_count":
             bad_range = bad_range | numbers.gt(3)
+        # Average customer ratings must be between 0 and 5.
+        if col == "avg_rating":
+            bad_range = numbers.lt(0) | numbers.gt(5)
         flagged = df.loc[invalid_text | bad_range, [id_col, col]]
         if not flagged.empty:
             print(f"  {col}:\n{flagged.to_string(index=False)}")
@@ -158,7 +162,7 @@ def audit_relationships(products, observations):
         print(bad_dates[["observation_id", "collection_date"]].to_string(index=False))
 
     print("\nMissing observation indicators by retailer (%):")
-    indicators = ["price_usd", "bestseller_list", "review_count"]
+    indicators = ["price_usd", "bestseller_list", "review_count", "avg_rating"]
     if not observations.empty:
         print((observations.groupby("source")[indicators].apply(lambda group: group.isna().mean() * 100)).round(1).to_string())
     print("Note: Bestseller status and review count are collected from Ulta and Sephora. Missing values indicate unavailable or unverified data and should be reviewed, not automatically treated as scraping failures.")
@@ -250,7 +254,6 @@ def delete_product():
             print(f"Database error: {error}")
             print("No changes were saved.")
 
-
 # Delete a single observation by observation ID.
 def delete_observation():
     with sqlite3.connect(DB_PATH) as conn:
@@ -266,7 +269,8 @@ def delete_observation():
                 o.collection_date,
                 o.price_usd,
                 o.bestseller_list,
-                o.review_count
+                o.review_count,
+                o.avg_rating
             FROM product_observations AS o
             JOIN products AS p
                 ON o.product_id = p.product_id
@@ -313,61 +317,6 @@ def delete_observation():
             """, (observation_id,))
             conn.commit()
             print("\nObservation deleted successfully.")
-        except sqlite3.Error as error:
-            conn.rollback()
-            print(f"Database error: {error}")
-            print("No changes were saved.")
-
-        def normalize(value):
-            return " ".join(str(value).casefold().split())
-        if (
-            normalize(original["brand"]) != normalize(duplicate["brand"])
-            or normalize(original["product_name"]) != normalize(duplicate["product_name"])
-        ):
-            print("Products have different brands or names.")
-            print("Automatic merging is blocked to avoid deleting unrelated products.")
-            return
-        # Check for conflicting known sizes.
-        original_size = original["size_oz"]
-        duplicate_size = duplicate["size_oz"]
-        if (
-            pd.notna(original_size)
-            and pd.notna(duplicate_size)
-            and abs(float(original_size) - float(duplicate_size)) > 0.02
-        ):
-            print("Products have different known sizes.")
-            print("Merge cancelled.")
-            return
-        # Count observations that will be transferred.
-        observation_count = conn.execute("""
-            SELECT COUNT(*)
-            FROM product_observations
-            WHERE product_id = ?
-        """, (delete_id,)).fetchone()[0]
-        print(f"\nKeep Product ID: {keep_id}")
-        print(f"Remove Product ID: {delete_id}")
-        print(f"Observations to transfer: {observation_count}")
-        confirmation = input(
-            "\nConfirm merge and removal? (y/n): "
-        ).strip().lower()
-        if confirmation != "y":
-            print("No changes made.")
-            return
-        # Run both changes in one transaction.
-        try:
-            conn.execute("BEGIN")
-            conn.execute("""
-                UPDATE product_observations
-                SET product_id = ?
-                WHERE product_id = ?
-            """, (keep_id, delete_id))
-            conn.execute("""
-                DELETE FROM products
-                WHERE product_id = ?
-            """, (delete_id,))
-            conn.commit()
-            print("\nDuplicate removed successfully.")
-            print(f"All observations are linked to Product ID {keep_id}.")
         except sqlite3.Error as error:
             conn.rollback()
             print(f"Database error: {error}")
@@ -707,6 +656,7 @@ def report_missing_records(products, observations):
         "price_usd",
         "bestseller_list",
         "review_count",
+        "avg_rating",
         "source_url",
         "collection_date"
     ]

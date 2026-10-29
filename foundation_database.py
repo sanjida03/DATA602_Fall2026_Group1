@@ -24,9 +24,7 @@ cursor.execute('''
         product_name TEXT NOT NULL COLLATE NOCASE,
         brand TEXT NOT NULL COLLATE NOCASE,
         size_oz REAL CHECK(size_oz > 0),
-        packaging_material TEXT CHECK (
-            packaging_material IN ('glass', 'plastic')
-        ),
+        packaging_material TEXT CHECK (packaging_material IN ('glass', 'plastic')),
         shade_count INTEGER CHECK(shade_count > 0),
         undertone_count INTEGER CHECK(undertone_count BETWEEN 0 AND 3),
         finish_type TEXT CHECK (
@@ -62,9 +60,14 @@ cursor.execute('''
         price_usd REAL CHECK(price_usd >= 0),
         bestseller_list INTEGER CHECK(bestseller_list IN (0,1)),
         review_count INTEGER CHECK(review_count >= 0),
+        avg_rating REAL CHECK (
+            avg_rating IS NULL OR
+            (avg_rating >= 0 AND avg_rating <= 5)
+        ),
         FOREIGN KEY (product_id) REFERENCES products(product_id)
     )
 ''')
 
+# Save changes and close the database.
 connection.commit()
 connection.close()
