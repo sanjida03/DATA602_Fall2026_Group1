@@ -1,128 +1,123 @@
-
-# Foundation Characteristics & Consumer Demand Analysis
-
-**What makes one foundation a bestseller while another goes unnoticed?**
-
-We built a Python-based data pipeline that collects and organizes cosmetic foundation characteristics and consumer demand indicators across multiple retailers.
+# Cosmetic Foundation Dataset: Foundation Characteristics and Bestseller Status
 
 ## Project Overview
 
-### Research Question
+This project examines which cosmetic foundation characteristics are associated with bestseller status at Ulta Beauty and Sephora.
+By comparing product features, prices, and customer feedback, the study aims to identify patterns that may help cosmetic brands and retailers make informed product development and marketing decisions.
+The research identifies relationships rather than cause and effect. Bestseller status is based on captured retailer-reported listings.
 
-**Which foundation product characteristics are associated with higher consumer demand?**
+**Research Question**
 
-We investigate whether factors such as price, shade range, coverage, finish, and skincare benefits are associated with product popularity.
+Which cosmetic foundation characteristics are associated with retailer-reported bestseller status at Ulta and Sephora?
 
-### What Our Project Does
+**Detailed methodology:** [Research Methodology](docs/Research_Methodology.md)
 
-- **Collects** foundation data from Ulta, Sephora, and TikTok Shop.
-- **Matches** the same products across retailers to prevent duplicate records.
-- **Tracks** prices, reviews, bestseller status, and TikTok units sold over time.
-- **Validates** missing values, inconsistencies, and potential data-quality issues.
-- **Stores** structured data in SQLite for future statistical analysis and modeling.
+## Data Sources
 
-### How It Works
+Product information is collected from two major beauty retailers:
+
+- **Ulta Beauty:** ulta.com
+- **Sephora:** sephora.com
+
+Python web scrapers collect foundation characteristics, prices, customer review counts, average ratings, and bestseller listing status from retailer webpages.
+The collected information is stored in a SQLite database `foundation.db`, which separates product characteristics from retailer-specific observations.
+
+**Further details:** Data Collection Protocol (coming soon) and Data Dictionary (coming soon).
+
+## Research Approach
+
+The study randomly selects 100 foundation records from a larger collection, with equal representation from Ulta and Sephora.
+Each retailer contributes 25 products found on its captured bestseller list and 25 products not found on that list.
+
+Before analysis, the selected data are checked for accuracy, missing information, and inconsistencies.
+The study then compares foundation characteristics and customer feedback to identify patterns associated with bestseller listing status.
+
+**Further details:** [Research Methodology](docs/Research_Methodology.md)
+
+
+## Project Workflow
+
+The project follows a step-by-step process to collect, organize, verify, and analyze foundation product information.
 
 ```text
-Ulta • Sephora • TikTok Shop
-            ↓
-     Web Scrapers
-            ↓
- foundation_app.py
- Product Matching & Validation
-            ↓
-      foundation.db
-   ┌────────┴────────┐
-   ↓                 ↓
-Products        Observations
-   └────────┬────────┘
-            ↓
-      db_cleaner.py
-   Data Quality Audit
-            ↓
-   Future Data Analysis
+Collect Data → Store in SQLite → Select Sample → Verify & Clean → Analyze Results
 ```
+### Repository Structure
 
-### Project Files
+| File | Purpose |
+|---|---|
+| `foundation_app.py` | Runs the data collection application |
+| `foundation_database.py` | Creates the database tables |
+| `ulta_product_scraper.py` | Collects product information from Ulta |
+| `sephora_product_scraper.py` | Collects product information from Sephora |
+| `ulta_bestsellers.py` | Checks Ulta bestseller listing membership |
+| `sephora_bestsellers.py` | Checks Sephora bestseller listing membership |
+| `db_cleaner.py` | Supports data-quality checks and corrections |
+| `docs/Research_Methodology.md` | Explains the research design and methods |
 
-| Script | Purpose |
-| --- | --- |
-| `foundation_database.py` | Initializes the SQLite database |
-| `foundation_app.py` | Manages collection, matching, and storage |
-| `ulta_product_scraper.py` | Collects Ulta product data |
-| `sephora_product_scraper.py` | Collects Sephora product data |
-| `tiktok_product_scraper.py` | Collects TikTok Shop product data |
-| `ulta_bestsellers.py` / `sephora_bestsellers.py` | Check retailer bestseller status |
-| `db_cleaner.py` | Identifies potential data-quality problems |
+The collected data are stored locally in `foundation.db`. The selected sample will be stored separately in `sampling.db`.
 
-### Expected Output
+**Note:** Sample selection, final data preparation, and analysis are planned stages of the workflow and will be documented as they are completed.
 
-A reusable SQLite dataset containing:
-
-- **Product characteristics:** Shade range, undertones, coverage, finish, SPF, skincare claims, and packaging.
-- **Consumer demand indicators:** Price, units sold, bestseller status, and review count.
-- **Source tracking:** Retailer, product URL, and collection date.
-
-**Current stage:** Data collection and validation. The dataset will support future exploratory analysis, statistical testing, and predictive modeling.
-
-## Getting Started
+## Installation & Usage
 
 ### Requirements
 
 - Python 3.14+
-- pip
 - Git
+- pip
+- Internet connection for product data collection
 
 ### Installation
 
-**1. Clone the repository**
+**1. Clone the repository:**
 
-```bash
-git clone https://github.com/sanjida03/DATA602_Fall2026_Group1.git
-cd DATA602_Fall2026_Group1
-```
+   ```powershell
+   git clone https://github.com/sanjida03/DATA602_Fall2026_Group1.git
+   cd DATA602_Fall2026_Group1
+   ```
 
-**2. Install dependencies**
+**2. Install the required Python libraries:**
 
-```bash
-python -m pip install -r requirements.txt
-```
+   ```powershell
+   pip install pandas numpy requests beautifulsoup4 matplotlib
+   ```
 
-The `requirements.txt` file contains:
+**3. Run the data collection application:**
 
-```text
-pandas
-requests
-beautifulsoup4
-```
+   ```powershell
+   python foundation_app.py
+   ```
 
-### Run the Pipeline
+The application allows users to collect foundation information from Ulta and Sephora, view saved records, and review collected data.
 
-Run the following commands in order:
+The information is stored in a local SQLite database `foundation.db`.
 
-**1. Initialize the SQLite database**
+**Further instructions:** Data Collection Protocol *(coming soon)*.
 
-```bash
-python foundation_database.py
-```
+## Limitations, Ethics & AI Disclosure
 
-**2. Collect foundation data**
+### Research Limitations
 
-```bash
-python foundation_app.py
-```
+- Bestseller status reflects captured retailer listings.
+- The selected sample may not represent all foundations sold at Ulta or Sephora.
+- Product information and bestseller rankings may change over time.
 
-Select option `1` and enter an Ulta, Sephora, or TikTok Shop product URL. The application collects, matches, and saves the data.
+For additional details, see the [Research Methodology](docs/Research_Methodology.md).
 
-**3. Audit the dataset**
+### Ethical Data Collection
 
-```bash
-python db_cleaner.py
-```
+The project collects publicly available product information from Ulta Beauty and Sephora.
+No customer names, personal profiles, or individual review text are collected.
+The dataset is stored separately from the public GitHub repository, with access limited to authorized users.
 
-Displays missing values, possible duplicates, standardization issues, and invalid values without modifying the database.
+### AI Assistance
 
-### Additional Documentation
+Generative AI was used as a support tool throughout this study. AI assistance included:
 
-A detailed **Developer & User Guide** covering application functions, data collection rules, and troubleshooting will be linked here when available.
+- **Research feedback:** identifying potential limitations, and suggesting improvements for the team to evaluate.
+- **Project management:** Organizing tasks, and outlining development steps to optimize work flow.
+- **Code development:** Assisting with Python code implementation, debugging, and troubleshooting.
+- **Documentation:** Help organize project documentation.
 
+All AI-generated feedback and suggestions were reviewed before acceptance or implementation. Final research decisions, data collection procedures, code verification, and analytical findings remain the responsibility of the research team.
