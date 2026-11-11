@@ -1,15 +1,15 @@
 # Research Methodology
 
-## 1. Research Design
+## Research Design
 
-### 1.1 Research Question
+### Research Question
 
 **Which cosmetic foundation characteristics are associated with retailer-reported bestseller status at Ulta and Sephora?**
 
 This study uses an exploratory and observational approach to examine how cosmetic foundation characteristics relate to products appearing on retailer bestseller lists.
 The findings aim to provide cosmetic brands and retailers with insights for product development, and marketing decisions.
 
-### 1.2 Research Population
+### Research Population
 
 The research population consists of cosmetic foundation products listed within Ulta Beauty's or Sephora's foundation product category.
 Product eligibility is determined by each retailer's product classification. Products listed exclusively under other product categories are excluded.
@@ -21,7 +21,7 @@ Products with missing or uncertain attribute information are retained for furthe
 Ulta Beauty and Sephora may apply different classification criteria when assigning products to their foundation category. 
 because the study draws from selected foundation products listed by these two retailers, the findings may not be generalizable to the entire cosmetic foundation market.
 
-### 1.3 Sampling Methodology
+### Sampling Methodology
 
 #### Sampling Design
 
@@ -87,7 +87,7 @@ As a result, the sample proportions do not reflect the actual distribution of be
 Additionally, random selection is restricted to the collected candidate inventory, which may not capture the full range of foundation products available through Ulta Beauty and Sephora.
 Consequently, findings are interpreted as exploratory associations within the selected sample rather than estimates representative of the broader cosmetic foundation market.
 
-### 1.4 Bestseller Status Definition
+### Bestseller Status Definition
 
 #### Definition
 
@@ -139,7 +139,7 @@ Throughout the analysis, products are consistently classified as `listed` or `un
 The dataset supports exploratory comparisons of foundation characteristics and customer feedback across these listing categories.
 Available listing dates and coverage information are documented to establish the reference period and scope of classification.
 
-### 1.5 Unit of Analysis
+### Unit of Analysis
 
 The primary unit of analysis is a **product–retailer pair**, representing one cosmetic foundation product observed within either Ulta Beauty or Sephora.
 
@@ -178,7 +178,7 @@ Comparisons are conducted across the two retailer sources to explore whether obs
 
 **Any statistically significant differences are interpreted as associations within the selected sample rather than evidence of causation.**
 
-### 1.6 Data Verification Rules
+### Data Verification Rules
 
 #### Verification Approach
 

@@ -1,6 +1,6 @@
 # Data Dictionary: Cosmetic Foundation Dataset
 
-## 1. Database Overview
+## Database Overview
 
 The database contains two tables connecting foundation characteristics with retailer-specific information.
 
@@ -51,7 +51,7 @@ Applies to `spf_present`, `non_comedogenic`, and `skincare_benefits`.
 
 **Note:** `0` means the claim was not found, not necessarily that the product lacks the characteristic.
 
-## 2. Products Table
+## Products Table
 
 Stores each foundation's identifying information and product characteristics.
 
@@ -71,7 +71,7 @@ Stores each foundation's identifying information and product characteristics.
 | `spf_present` | INTEGER | SPF claim | 1, 0, NULL | `0` |
 | `wear_claim_hours` | INTEGER | Advertised wear duration in hours | Greater than 0, or NULL | `36` |
 
-## 3. Product Observations Table
+## Product Observations Table
 
 Stores retailer-specific information collected for each foundation.
 
