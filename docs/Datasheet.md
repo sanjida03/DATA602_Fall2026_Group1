@@ -76,6 +76,16 @@ Python web scrapers collect foundation characteristics, prices, customer ratings
 The information is stored in `foundation.db`, along with the retailer source, product URL, and collection date.
 Bestseller status is determined separately for each retailer using its captured bestseller listing.
 
+### Bestseller Classification
+
+| Value | Meaning |
+|---|---|
+| `1` | Found on the captured bestseller list of its source retailer |
+| `0` | Not found on the captured bestseller list |
+| `NULL` | Listing status could not be determined |
+
+Each product is classified against its own retailer's captured list. A value of `0` does not confirm that a product is commercially unsuccessful.
+
 ### Product Selection
 
 The study uses random selection from a larger collection of foundation products.
@@ -92,7 +102,7 @@ The selected records will be stored separately in `sampling.db` for verification
 
 **Collection dates:** Recorded for each observation; the final collection period will be added after data collection.
 
-**Detailed procedures:** [Research Methodology](Research_Methodology.md)
+**Detailed procedures & Classification methods:** [Research Methodology](Research_Methodology.md)
 
 
 ## Data Processing & Quality
@@ -155,3 +165,30 @@ The dataset can identify patterns and relationships, but it cannot establish why
 Findings should not be used alone to predict sales, measure actual consumer demand, or justify business decisions without further research.
 
 **Additional details:** [Research Methodology](Research_Methodology.md)
+
+## 6. Ethics & Dataset Maintenance
+
+### Responsible Data Collection
+
+The project collects publicly available product information from Ulta Beauty and Sephora. No customer names, personal profiles, or individual review text are collected.
+
+Data collection is limited to information relevant to the research and should respect retailer website access requirements.
+
+### Data Storage & Access
+
+The original collected data are preserved separately from the verified dataset.
+The dataset will be stored in a private location and made available to authorized reviewers. Access instructions will be added once the storage location is finalized.
+
+### Dataset Maintenance
+
+| Activity | Approach |
+|---|---|
+| Data updates | Record the retailer source and collection date |
+| Corrections | Document changes and supporting evidence |
+| Version control | Track code and documentation changes in GitHub |
+| Dataset updates | Preserve original data and maintain verified versions |
+| Access | Limit dataset access to authorized users |
+
+The dataset represents retailer information collected during the study period. Future changes to retailer listings or product details will not automatically update historical records.
+
+**Related documentation:** [Research Methodology](Research_Methodology.md) | Data Collection Protocol *(coming soon)*
